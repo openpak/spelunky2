@@ -79,9 +79,10 @@ relay endpoint — IP matching alone never binds (servers/connectivity's rule,
 and ours). Open transport questions for that phase: the game dials edge
 *names*, and UDP carries no SNI, so answering them needs per-name IPs or
 per-edge ports from the `/put`/`/get` capture — undecided until measured.
-Needs a `spelunky2` backend token in connectivity's config (operator
-provision + restart) plus `CONNECTIVITY_URL`/`CONNECTIVITY_TOKEN` on this
-service's quadlet; until then logins go unleashed.
+Needs a `spelunky2` backend token in connectivity's config (live since
+2026-10-13: `openpak-spelunky2.token`, config backup beside it) plus
+`CONNECTIVITY_URL`/`CONNECTIVITY_TOKEN_FILE` on this service's quadlet;
+until then logins go unleashed.
 
 ## 5. What is deliberately not served
 

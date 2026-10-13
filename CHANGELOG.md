@@ -1,5 +1,12 @@
 # Changelog — spelunky2
 
+## v0.3.1 — 2026-10-13
+
+Token from a file: `CONNECTIVITY_TOKEN_FILE` is read when
+`CONNECTIVITY_TOKEN` is empty — the house pattern (NPLN titles mount theirs
+at `/app/connectivity.token`). Live with the `spelunky2` backend token since
+this version.
+
 ## v0.3.0 — 2026-10-13
 
 **Shared-connectivity leases.** Every accepted `/nso` registers one
