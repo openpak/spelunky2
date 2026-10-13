@@ -19,26 +19,47 @@ TLS: stock libcurl (`NintendoSDK_libcurl-13_3_0`); no embedded CA bundle, no
 SHA256 pins, no custom verify strings found. The OpenPak path is Traefik
 serving an OpenPak-CA leaf — unproven until a boot.
 
-## 2. Endpoints (shapes unknown — the Harbor capture fills these in)
+## 2. Endpoints (measured 2026-10-13, Harbor + box capture)
 
-| Method | Path | From the strings | Gap |
-| --- | --- | --- | --- |
-| ? | `https://x.spelunky2.net/get` | lobby fetch; UI reads "Enter Code" / "Error joining game" | field carrying the code (query? body?); reply shape (edge host? session blob?) |
-| ? | `https://x.spelunky2.net/put` | lobby publish (host) | body shape (code? edge choice? player info?); keepalive or one-shot? |
-| ? | `https://x.spelunky2.net/nso` | Nintendo token check — the game reads the `nn::account` token cache and the binary holds no `*.nintendo.*` URL, so verification is server-side | which token (NSA id_token?), which field, what reply gates the menu |
-| ? | `https://x.spelunky2.net/64b` | unknown | everything — may be version/config rather than lobby |
+The transport is **binary**: `application/octet-stream` replies, HTTP/2
+(ALPN `h2 http/1.1`), on-demand OpenPak-CA cert accepted by the game.
 
-Even the HTTP methods are unconfirmed: `/get` and `/put` are path names, not
-verbs. The stubs log method + redacted URL + redacted body for every hit, so
-the first boot writes this table.
+| Exchange | Request | Real-server reply |
+| --- | --- | --- |
+| `POST /nso` | the **raw BAAS id_token as the whole body** (1269 B, `Content-Type: application/x-www-form-urlencoded`, `Accept: */*`, no field names at all) | invalid token: 200, 18 bytes `00×16 + ff 00` — the reject packet. Hypothesis: `{session[16], status u16le}` with status `0x00ff` = rejected; success presumably fills the session and returns `0x0000`. Unproven — needs a valid token |
+| `GET /get`, `POST /get` (guessed `?code=` / `code=` fields) | — | 200, empty (guessed shapes; the real join carries a session from `/nso`) |
+| `GET /put`, `POST /put` (guessed `code=`) | — | 200, empty |
+| `GET /64b`, `GET /` | — | 200, empty |
+| `POST /64b` (`code=ABCD`) | — | 200, **4 bytes `ba 78 e6 01`** (u32le `0x01e678ba`; meaning unknown — version? error? recorded, not interpreted) |
+
+The `/nso` token is the standard BAAS id_token (kid `openpak-baas-key-1`,
+per-console `iss`, `aud ed9e2f05d286f7b8`, ~3 h validity). Claims that matter
+to us: `nintendo.ai` (title id), `nintendo.av` (`00080000` = update v1.28.0 —
+the server can gate versions), `sub` (player), plus an embedded `openpak` ticket.
+Full capture method (one-shot `NXBAAS_TRACE_BODIES=1`, reverted immediately)
+is recorded in `scratch/spelunky2/NOTES.md`.
+
+Client flow measured: enter online → single `POST /nso` → on 404 the game
+opens the **error applet** (`0100000000001005`). No `/put`, `/get`, edge or CDN
+calls follow a rejection.
 
 ## 3. Identity
 
-`/nso` carries a Nintendo token OpenPak itself signed. This service will not
-phone Nintendo about it — it asks nx-baas `POST /internal/switch/identity`
+`/nso` carries the raw BAAS id_token as its whole body. This service verifies
+it against nx-baas `POST /internal/switch/identity`
 (`cmd/spelunky2d/identity.go`, same contract as `servers/klei`), which also
-answers nickname, banned state and online presence. Wired up once the capture
-names the field.
+answers nickname, banned state and online presence. On success the service
+must return the success packet (§2 hypothesis); on rejection it returns the
+18-byte reject packet byte-for-byte.
+
+## 3a. Reaching the service: forward via nx-baas
+
+`spelunky2d` is plain HTTP and no fixed leaf can be minted here (the CA key is
+owner-held), so Traefik cannot terminate for it directly. Until the cutover,
+nx-baas forwards the name like it forwards PlayFab (`NX_PLAYFAB_URL`
+precedent): an env-gated branch (`NX_SPELUNKY2_URL`, default off) that
+reverse-proxies `x.spelunky2.net` to the container and logs redacted. The
+Traefik router + fixed cert + direct profile claim stay the end state.
 
 ## 4. Edge relay (unmeasured)
 
