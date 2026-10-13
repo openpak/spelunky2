@@ -1,6 +1,13 @@
 # Changelog — spelunky2
 
-## v0.5.1 — 2026-10-13
+## v0.6.0 — 2026-10-13
+
+**Dumb relay between gameplay senders.** The 152-byte session packets two
+clients spray at the session port are now forwarded to the other recent
+sender(s), pairing by recency until `/put` names the lobby. If the edge is a
+relay (not a server), movements should start syncing with no further
+protocol work; if the client wants server answers instead, the unchanged
+stall names the next gap. Pairing is exact for two players.
 
 Multi-port listen and whole-packet logging: `-edge-addr` takes a comma
 list (2816 discovery + 29489 session port so far); longer gameplay-phase

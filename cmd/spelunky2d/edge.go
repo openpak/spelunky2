@@ -19,6 +19,7 @@ import (
 	"log"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"openpak/spelunky2/redact"
@@ -43,6 +44,7 @@ func serveEdgePort(addr string, echo bool) {
 	}
 	defer pc.Close()
 	log.Printf("[spelunky2] edge probes on %s", pc.LocalAddr())
+	peers := newPeerSet()
 	buf := make([]byte, 1500)
 	for {
 		_ = pc.SetReadDeadline(time.Now().Add(time.Hour))
@@ -65,12 +67,62 @@ func serveEdgePort(addr string, echo bool) {
 			}
 		} else {
 			// Anything longer is gameplay-phase traffic (handshakes, state):
-			// logged whole (capped) and unanswered until its shape is known.
-			// Capture-phase verboseness, same class as NXBAAS_TRACE_BODIES:
-			// sessions here are random per login and die with it.
+			// logged whole (capped) and relayed to the other recent
+			// senders. The edge is a dumb relay: pairing is by recency
+			// until /put names the lobby (two players today). Capture-phase
+			// verboseness, same class as NXBAAS_TRACE_BODIES: sessions here
+			// are random per login and die with it.
 			log.Printf("[spelunky2] edge packet src=%s len=%d body=%x", tag, n, buf[:min(n, 128)])
+			for _, dst := range peers.others(src.String()) {
+				da := mustAddr(dst)
+				if da == nil {
+					continue
+				}
+				if _, err := pc.WriteTo(buf[:n], da); err != nil {
+					log.Printf("[spelunky2] edge relay failed: %v", err)
+				} else {
+					log.Printf("[spelunky2] edge relay %s -> %s len=%d", tag, redact.Tag(dst), n)
+				}
+			}
+			peers.seen(src.String())
 		}
 	}
+}
+
+// peerSet remembers recent gameplay senders so each packet reaches the other
+// side. Recency pairing is a stand-in for lobby membership until /put names
+// the room; with two players it is exact.
+type peerSet struct {
+	mu   sync.Mutex
+	last map[string]time.Time
+}
+
+func newPeerSet() *peerSet { return &peerSet{last: map[string]time.Time{}} }
+
+func (p *peerSet) seen(addr string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.last[addr] = time.Now()
+}
+
+func (p *peerSet) others(addr string) []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var out []string
+	for a, t := range p.last {
+		if a != addr && time.Since(t) < time.Minute {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+func mustAddr(s string) net.Addr {
+	a, err := net.ResolveUDPAddr("udp", s)
+	if err != nil {
+		return nil
+	}
+	return a
 }
 
 func min(a, b int) int {

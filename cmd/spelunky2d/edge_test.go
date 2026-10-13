@@ -39,8 +39,7 @@ func TestEdgeProbeLogged(t *testing.T) {
 	}
 }
 
-func TestEdgeMultiPortAndLongPacket(t *testing.T) {
-	var logs bytes.Buffer
+func TestEdgeMultiPortAndLongPacket(t *testing.T) {	var logs bytes.Buffer
 	old := log.Writer()
 	log.SetOutput(&logs)
 	t.Cleanup(func() { log.SetOutput(old) })
@@ -61,5 +60,43 @@ func TestEdgeMultiPortAndLongPacket(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	if got := logs.String(); !bytes.Contains(logs.Bytes(), []byte("len=152")) {
 		t.Errorf("long packet not logged whole: %q", got)
+	}
+}
+
+func TestEdgeRelayForwardsToOtherSender(t *testing.T) {
+	go serveEdgeProbes("127.0.0.1:18284", false)
+	time.Sleep(300 * time.Millisecond)
+	dial := func() net.Conn {
+		c, err := net.Dial("udp", "127.0.0.1:18284")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	a, b := dial(), dial()
+	defer a.Close()
+	defer b.Close()
+	// A announces itself; nothing to forward to yet.
+	if _, err := a.Write(bytes.Repeat([]byte{0xaa}, 152)); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	// B announces itself and must receive A's next packet via the relay.
+	payload := append([]byte{0x01, 0x02}, bytes.Repeat([]byte{0xbb}, 150)...)
+	if _, err := b.Write(payload[:152]); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	if _, err := a.Write(payload[:152]); err != nil {
+		t.Fatal(err)
+	}
+	got := make([]byte, 200)
+	_ = b.SetReadDeadline(time.Now().Add(2 * time.Second))
+	n, err := b.Read(got)
+	if err != nil {
+		t.Fatalf("B received nothing relayed: %v", err)
+	}
+	if n != 152 || !bytes.Equal(got[:n], payload[:152]) {
+		t.Errorf("relayed %d bytes, want A's 152 intact", n)
 	}
 }
