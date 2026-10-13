@@ -38,7 +38,7 @@ import (
 var (
 	addr       = flag.String("addr", ":22660", "HTTP listen address (Traefik terminates TLS in front)")
 	healthAddr = flag.String("health-addr", ":22661", "health listen address")
-	edgeAddr   = flag.String("edge-addr", ":2816", "UDP edge-probe listen address (the game's fixed port; empty disables)")
+	edgeAddr   = flag.String("edge-addr", ":2816", "UDP listen addresses, comma-separated (the game's ports; empty disables)")
 	edgeEcho   = flag.Bool("edge-echo", true, "answer each 2-byte probe with the hypothesized 20-byte echo reply")
 )
 

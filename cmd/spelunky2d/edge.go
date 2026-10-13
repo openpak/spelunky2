@@ -18,6 +18,7 @@ package main
 import (
 	"log"
 	"net"
+	"strings"
 	"time"
 
 	"openpak/spelunky2/redact"
@@ -25,6 +26,16 @@ import (
 
 // edgeEcho answers probes while the reply shape is being established.
 func serveEdgeProbes(addr string, echo bool) {
+	for _, a := range strings.Split(addr, ",") {
+		a = strings.TrimSpace(a)
+		if a == "" {
+			continue
+		}
+		go serveEdgePort(a, echo)
+	}
+}
+
+func serveEdgePort(addr string, echo bool) {
 	pc, err := net.ListenPacket("udp", addr)
 	if err != nil {
 		log.Printf("[spelunky2] edge listener %s: %v (probes go unanswered)", addr, err)
@@ -53,7 +64,11 @@ func serveEdgeProbes(addr string, echo bool) {
 				}
 			}
 		} else {
-			log.Printf("[spelunky2] edge packet src=%s len=%d head=%x", tag, n, buf[:min(n, 16)])
+			// Anything longer is gameplay-phase traffic (handshakes, state):
+			// logged whole (capped) and unanswered until its shape is known.
+			// Capture-phase verboseness, same class as NXBAAS_TRACE_BODIES:
+			// sessions here are random per login and die with it.
+			log.Printf("[spelunky2] edge packet src=%s len=%d body=%x", tag, n, buf[:min(n, 128)])
 		}
 	}
 }

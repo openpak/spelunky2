@@ -38,3 +38,28 @@ func TestEdgeProbeLogged(t *testing.T) {
 		t.Errorf("echo reply = %x, want 20 bytes starting 07 24", rep[:n])
 	}
 }
+
+func TestEdgeMultiPortAndLongPacket(t *testing.T) {
+	var logs bytes.Buffer
+	old := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(old) })
+
+	go serveEdgeProbes("127.0.0.1:18282, 127.0.0.1:18283", false)
+	time.Sleep(300 * time.Millisecond)
+	for _, port := range []string{"127.0.0.1:18282", "127.0.0.1:18283"} {
+		c, err := net.Dial("udp", port)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body := append([]byte{9, 0x14}, bytes.Repeat([]byte{0xab}, 150)...)
+		if _, err := c.Write(body); err != nil {
+			t.Fatal(err)
+		}
+		c.Close()
+	}
+	time.Sleep(300 * time.Millisecond)
+	if got := logs.String(); !bytes.Contains(logs.Bytes(), []byte("len=152")) {
+		t.Errorf("long packet not logged whole: %q", got)
+	}
+}
