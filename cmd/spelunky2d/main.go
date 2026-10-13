@@ -39,6 +39,7 @@ var (
 	addr       = flag.String("addr", ":22660", "HTTP listen address (Traefik terminates TLS in front)")
 	healthAddr = flag.String("health-addr", ":22661", "health listen address")
 	edgeAddr   = flag.String("edge-addr", ":2816", "UDP edge-probe listen address (the game's fixed port; empty disables)")
+	edgeEcho   = flag.Bool("edge-echo", true, "answer each 2-byte probe with the hypothesized 20-byte echo reply")
 )
 
 func main() {
@@ -58,7 +59,7 @@ func main() {
 
 	log.Printf("[spelunky2] serving x.spelunky2.net on %s", *addr)
 	if *edgeAddr != "" {
-		go serveEdgeProbes(*edgeAddr)
+		go serveEdgeProbes(*edgeAddr, *edgeEcho)
 	}
 	log.Fatal(http.ListenAndServe(*addr, mux))
 }

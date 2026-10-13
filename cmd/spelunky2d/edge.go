@@ -23,7 +23,8 @@ import (
 	"openpak/spelunky2/redact"
 )
 
-func serveEdgeProbes(addr string) {
+// edgeEcho answers probes while the reply shape is being established.
+func serveEdgeProbes(addr string, echo bool) {
 	pc, err := net.ListenPacket("udp", addr)
 	if err != nil {
 		log.Printf("[spelunky2] edge listener %s: %v (probes go unanswered)", addr, err)
@@ -41,6 +42,16 @@ func serveEdgeProbes(addr string) {
 		tag := redact.Tag(src.String())
 		if n == 2 {
 			log.Printf("[spelunky2] edge probe src=%s edge=%d magic=%#04x len=%d", tag, buf[0], buf[1], n)
+			if echo {
+				// Hypothesis: the client wants its probe echoed inside a
+				// 20-byte reply (it asks with magic 0x14 = 20, and selects
+				// the edge entry by a reply byte & 0x1f). Zeros elsewhere.
+				rep := make([]byte, 20)
+				rep[0], rep[1] = buf[0], buf[1]
+				if _, err := pc.WriteTo(rep, src); err != nil {
+					log.Printf("[spelunky2] edge reply failed: %v", err)
+				}
+			}
 		} else {
 			log.Printf("[spelunky2] edge packet src=%s len=%d head=%x", tag, n, buf[:min(n, 16)])
 		}

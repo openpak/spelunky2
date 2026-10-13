@@ -1,6 +1,13 @@
 # Changelog — spelunky2
 
-## v0.4.0 — 2026-10-13
+## v0.5.0 — 2026-10-13
+
+**Echo-reply to edge probes (hypothesis).** The 2-byte `{edge_index, 0x14}`
+probe asks with magic 20, and the client's receive path selects the edge
+entry by a reply byte & 0x1f — so each probe is answered with its own two
+bytes inside a 20-byte reply, zeros elsewhere. If the client advances
+(`/put`, gameplay handshake, or a new error), the shape is confirmed or the
+next gap names itself. `-edge-echo=false` restores silence for comparison.
 
 **Edge probe listener.** After a successful `/nso` the client resolves
 edge-00 through edge-31 and sprays 2-byte UDP probes (`{edge_index, 0x24}`,
