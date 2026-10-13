@@ -50,9 +50,21 @@ type connectivityClient struct {
 }
 
 func newConnectivityClient() *connectivityClient {
+	token := os.Getenv("CONNECTIVITY_TOKEN")
+	if token == "" {
+		// The house pattern keeps backend tokens in files, not the
+		// environment (NPLN titles mount theirs at /app/connectivity.token).
+		if path := os.Getenv("CONNECTIVITY_TOKEN_FILE"); path != "" {
+			if raw, err := os.ReadFile(path); err == nil {
+				token = string(bytes.TrimSpace(raw))
+			} else {
+				log.Printf("[spelunky2] connectivity: read token file: %v", err)
+			}
+		}
+	}
 	return &connectivityClient{
 		url:   os.Getenv("CONNECTIVITY_URL"),
-		token: os.Getenv("CONNECTIVITY_TOKEN"),
+		token: token,
 	}
 }
 

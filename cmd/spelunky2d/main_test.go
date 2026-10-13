@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -195,5 +197,20 @@ func TestLogURLHidesQuerySecrets(t *testing.T) {
 	}
 	if !strings.Contains(got, "platform=switch") {
 		t.Errorf("safe query param missing from %s", got)
+	}
+}
+
+func TestConnectivityTokenFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "connectivity.token")
+	if err := os.WriteFile(path, []byte("file-token-0123456789abcdef0123456789\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CONNECTIVITY_URL", "http://connectivity.internal:20150")
+	t.Setenv("CONNECTIVITY_TOKEN", "")
+	t.Setenv("CONNECTIVITY_TOKEN_FILE", path)
+	c := newConnectivityClient()
+	if c.token != "file-token-0123456789abcdef0123456789" {
+		t.Errorf("token file not read: %q", c.token)
 	}
 }
