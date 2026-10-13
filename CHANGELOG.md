@@ -1,5 +1,12 @@
 # Changelog — spelunky2
 
+## v0.5.1 — 2026-10-13
+
+Multi-port listen and whole-packet logging: `-edge-addr` takes a comma
+list (2816 discovery + 29489 session port so far); longer gameplay-phase
+packets are logged whole (128-byte cap) for the handshake RE instead of
+just their heads.
+
 ## v0.5.0 — 2026-10-13
 
 **Echo-reply to edge probes (hypothesis).** The 2-byte `{edge_index, 0x14}`
