@@ -1,6 +1,16 @@
 # Changelog — spelunky2
 
-## v0.3.1 — 2026-10-13
+## v0.4.0 — 2026-10-13
+
+**Edge probe listener.** After a successful `/nso` the client resolves
+edge-00 through edge-31 and sprays 2-byte UDP probes (`{edge_index, 0x24}`,
+8 rounds of 32) at its fixed port 2816/udp, picking by reply latency
+(measured live with strace: all 256 to one address, nothing to a second).
+`spelunky2d` now listens on 2816/udp (`-edge-addr`, empty disables) and logs
+every probe redacted, answering nothing until the reply shape is known.
+Needs 2816/udp published on the quadlet, an OCI ingress rule and a host
+ACCEPT — without those the probes die upstream (measured: box tcpdump empty
+while the client sent 256).
 
 Token from a file: `CONNECTIVITY_TOKEN_FILE` is read when
 `CONNECTIVITY_TOKEN` is empty — the house pattern (NPLN titles mount theirs
