@@ -32,10 +32,11 @@ type sessions struct {
 	mu       sync.Mutex
 	byToken  map[string][16]byte
 	bySessID map[string]*player
+	leases   map[string]string // session hex -> connectivity lease ID ("" when unleashed)
 }
 
 func newSessions() *sessions {
-	return &sessions{byToken: map[string][16]byte{}, bySessID: map[string]*player{}}
+	return &sessions{byToken: map[string][16]byte{}, bySessID: map[string]*player{}, leases: map[string]string{}}
 }
 
 // forToken returns the session for this token, minting and remembering it on
@@ -54,6 +55,14 @@ func (st *sessions) forToken(tok string, p *player) (sess [16]byte, ok bool) {
 	st.byToken[key] = sess
 	st.bySessID[string(sess[:])] = p
 	return sess, true
+}
+
+// setLease remembers the connectivity lease a session earned ("" when the
+// login went unleashed). Kept for the relay phase's pair allocations.
+func (st *sessions) setLease(sess [16]byte, lease string) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	st.leases[hex.EncodeToString(sess[:])] = lease
 }
 
 // successPacket renders an accepted login: the session, then status zero.

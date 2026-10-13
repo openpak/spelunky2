@@ -19,9 +19,13 @@ content and it works against Mossmouth.
 
 `/nso` verifies the raw BAAS id_token against nx-baas and answers the binary
 protocol: the success packet on acceptance, Mossmouth's own 18-byte reject
-packet otherwise. `/put`, `/get` and `/64b` still log the redacted request
-and answer 404 — the first accepted login decides what they must say. Known
-gaps are listed in §2–§4 of [`docs/protocol.md`](docs/protocol.md). The
+packet otherwise. Every accepted login also leases one participant generation
+from the shared connectivity service (title `spelunky2`, component
+`rendezvous`), so players behind one public IP stay distinct when the relay
+phase pairs them; unconfigured or failing, the login still succeeds and the
+session goes unleashed. `/put`, `/get` and `/64b` still log the redacted
+request and answer 404 — the first accepted login decides what they must
+say. Known gaps are listed in §2–§4 of [`docs/protocol.md`](docs/protocol.md). The
 gameplay relay (`edge-%02d.spelunky2.net`, raw TCP+UDP) is unmeasured and
 untouched by this process.
 

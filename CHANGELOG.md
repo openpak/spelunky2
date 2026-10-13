@@ -1,6 +1,15 @@
 # Changelog — spelunky2
 
-## v0.2.0 — 2026-10-13
+## v0.3.0 — 2026-10-13
+
+**Shared-connectivity leases.** Every accepted `/nso` registers one
+participant generation (`spelunky2` / session / verified player /
+`rendezvous`) with servers/connectivity, so the relay phase has lease IDs to
+name when a host/joiner pair forms — two players behind one NAT stay two
+participants. Env-gated (`CONNECTIVITY_URL` + `CONNECTIVITY_TOKEN`), stdlib
+only, and never fatal: unconfigured or refused, the login succeeds unleashed
+and the line says so. Pair relays and edge transport stay unbuilt until
+`/put` and `/get` show the lobby shape.
 
 **`/nso` verifies and answers.** The first live capture showed the game
 posting its raw BAAS id_token as the whole body and the real server speaking

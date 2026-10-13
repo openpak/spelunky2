@@ -61,7 +61,7 @@ precedent): an env-gated branch (`NX_SPELUNKY2_URL`, default off) that
 reverse-proxies `x.spelunky2.net` to the container and logs redacted. The
 Traefik router + fixed cert + direct profile claim stay the end state.
 
-## 4. Edge relay (unmeasured)
+## 4. Edge relay (unmeasured) and shared connectivity
 
 The game links full `nn::socket` TCP+UDP (Bind/Listen/Accept/SendTo/RecvFrom)
 and the only gameplay hosts are `edge-%02d.spelunky2.net`. Unknown: how many
@@ -69,6 +69,19 @@ edges exist, which one a lobby is assigned (presumably inside the `/put` or
 `/get` reply), which ports, TCP vs UDP per flow, and whether the relay is a
 dumb packet forwarder or speaks a handshake. The capture must cover
 host-then-join across two clients to see both sides of this.
+
+Every accepted login already holds a connectivity lease
+(`cmd/spelunky2d/connectivity.go`: participant `spelunky2`/session/player,
+component `rendezvous`, TTL 300, renewed by re-posted `/nso`). When a pair
+forms, the backend allocates a pair relay for the two lease IDs and binds it
+only after the game's own handshake proves each side's mapping toward the
+relay endpoint — IP matching alone never binds (servers/connectivity's rule,
+and ours). Open transport questions for that phase: the game dials edge
+*names*, and UDP carries no SNI, so answering them needs per-name IPs or
+per-edge ports from the `/put`/`/get` capture — undecided until measured.
+Needs a `spelunky2` backend token in connectivity's config (operator
+provision + restart) plus `CONNECTIVITY_URL`/`CONNECTIVITY_TOKEN` on this
+service's quadlet; until then logins go unleashed.
 
 ## 5. What is deliberately not served
 

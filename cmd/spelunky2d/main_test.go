@@ -102,6 +102,68 @@ func TestNsoAcceptsAVerifiedToken(t *testing.T) {
 	}
 }
 
+func TestNsoRegistersConnectivityLease(t *testing.T) {
+	ids, done := fakeIdentity(t, 200)
+	defer done()
+	var sawKey connParticipantKey
+	var sawAuth string
+	conn := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawAuth = r.Header.Get("Authorization")
+		var req connRegisterRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("register body is not JSON: %v", err)
+		}
+		sawKey = req.Key
+		_, _ = w.Write([]byte(`{"id":"lease-1","expires_at":"2026-10-13T14:00:00Z"}`))
+	}))
+	defer conn.Close()
+	s := newServerWith(ids, &connectivityClient{url: conn.URL, token: "test-token-0123456789abcdef0123456789"})
+	req := httptest.NewRequest(http.MethodPost, "https://x.spelunky2.net/nso", strings.NewReader("valid-token"))
+	rec := httptest.NewRecorder()
+	s.route(rec, req)
+	if rec.Code != 200 || len(rec.Body.Bytes()) != 18 {
+		t.Fatalf("login failed with connectivity up: %d", rec.Code)
+	}
+	if sawAuth != "Bearer test-token-0123456789abcdef0123456789" {
+		t.Errorf("auth header %q", sawAuth)
+	}
+	if sawKey.Title != "spelunky2" || sawKey.Player != "KU_test" || sawKey.Component != "rendezvous" ||
+		sawKey.Session == "" || sawKey.Generation == "" {
+		t.Errorf("participant key %+v", sawKey)
+	}
+}
+
+func TestNsoSucceedsUnleashedWhenConnectivityDown(t *testing.T) {
+	ids, done := fakeIdentity(t, 200)
+	defer done()
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(503)
+	}))
+	defer down.Close()
+	s := newServerWith(ids, &connectivityClient{url: down.URL, token: "test-token-0123456789abcdef0123456789"})
+	req := httptest.NewRequest(http.MethodPost, "https://x.spelunky2.net/nso", strings.NewReader("valid-token"))
+	rec := httptest.NewRecorder()
+	s.route(rec, req)
+	if rec.Code != 200 || len(rec.Body.Bytes()) != 18 {
+		t.Fatalf("login failed with connectivity down: %d", rec.Code)
+	}
+	if got := rec.Body.Bytes(); got[16] != 0x00 || got[17] != 0x00 {
+		t.Fatalf("not the success packet: %x", got)
+	}
+}
+
+func TestNsoSkipsConnectivityWhenUnconfigured(t *testing.T) {
+	ids, done := fakeIdentity(t, 200)
+	defer done()
+	s := newServerWith(ids, &connectivityClient{})
+	req := httptest.NewRequest(http.MethodPost, "https://x.spelunky2.net/nso", strings.NewReader("valid-token"))
+	rec := httptest.NewRecorder()
+	s.route(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("login failed with connectivity off: %d", rec.Code)
+	}
+}
+
 func TestRedactHidesCodeAndToken(t *testing.T) {
 	got := redactBody([]byte(`{"code":"ABCD-EFGH","platform":"switch","mode":"coop"}`))
 	if strings.Contains(got, "ABCD") {

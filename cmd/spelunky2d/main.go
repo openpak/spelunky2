@@ -27,6 +27,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 	"flag"
 	"io"
 	"log"
@@ -61,9 +62,16 @@ func main() {
 type server struct {
 	ids      identityClient
 	sessions *sessions
+	conn     *connectivityClient
 }
 
-func newServer(ids identityClient) *server { return &server{ids: ids, sessions: newSessions()} }
+func newServer(ids identityClient) *server {
+	return newServerWith(ids, newConnectivityClient())
+}
+
+func newServerWith(ids identityClient, conn *connectivityClient) *server {
+	return &server{ids: ids, sessions: newSessions(), conn: conn}
+}
 
 // route dispatches on path first and hostname second. All four API paths ride
 // the one x.spelunky2.net name on one port behind Traefik.
@@ -127,7 +135,10 @@ func (s *server) nso(w http.ResponseWriter, r *http.Request) {
 		writeOctets(w, rejectPacket)
 		return
 	}
-	log.Printf("[spelunky2] nso accepted player=%s session=%s", who(p.BaasUserID), sessionTag(sess))
+	sessHex := hex.EncodeToString(sess[:])
+	lease := s.conn.register(sessHex, p.BaasUserID)
+	s.sessions.setLease(sess, lease)
+	log.Printf("[spelunky2] nso accepted player=%s session=%s lease=%s", who(p.BaasUserID), sessionTag(sess), leaseTag(lease))
 	writeOctets(w, successPacket(sess))
 }
 

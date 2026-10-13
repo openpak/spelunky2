@@ -43,6 +43,15 @@ func sessionTag(sess [16]byte) string {
 	return redact.Tag(sess[:])
 }
 
+// leaseTag names a connectivity lease the same way: an opaque ID that still
+// lets the register line and the later relay lines be read together.
+func leaseTag(lease string) string {
+	if lease == "" {
+		return "-"
+	}
+	return redact.Tag(lease)
+}
+
 // logURL renders a request URL for the log: the path scrubbed and cut, the
 // query parameters with secret values hidden. The join code and the Nintendo
 // token may both ride the query string, so it is never logged raw.
