@@ -15,15 +15,15 @@ guest's TLS for this name, the same arrangement as [`servers/klei`](../klei) and
 `cdn.spelunky2.net` is deliberately **not** redirected: it serves the game's own static
 content and it works against Mossmouth.
 
-## Status: stubs built, nothing console-verified
+## Status: /nso implemented, the rest are capture stubs
 
-All four endpoints log the redacted request and answer 404. The request and
-reply shapes are still unknown — static strings give the paths but not the
-fields — so the first Harbor boot is the implementation: its log lines are the
-spec the handlers get written against. Known gaps are listed in §2–§4 of
-[`docs/protocol.md`](docs/protocol.md); the nearest one is which `/nso` field
-carries the Nintendo token. The gameplay relay (`edge-%02d.spelunky2.net`,
-raw TCP+UDP) is unmeasured and untouched by this process.
+`/nso` verifies the raw BAAS id_token against nx-baas and answers the binary
+protocol: the success packet on acceptance, Mossmouth's own 18-byte reject
+packet otherwise. `/put`, `/get` and `/64b` still log the redacted request
+and answer 404 — the first accepted login decides what they must say. Known
+gaps are listed in §2–§4 of [`docs/protocol.md`](docs/protocol.md). The
+gameplay relay (`edge-%02d.spelunky2.net`, raw TCP+UDP) is unmeasured and
+untouched by this process.
 
 ## Why the console's token is not verified here
 

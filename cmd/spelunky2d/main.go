@@ -26,6 +26,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"io"
 	"log"
@@ -58,10 +59,11 @@ func main() {
 }
 
 type server struct {
-	ids identityClient
+	ids      identityClient
+	sessions *sessions
 }
 
-func newServer(ids identityClient) *server { return &server{ids: ids} }
+func newServer(ids identityClient) *server { return &server{ids: ids, sessions: newSessions()} }
 
 // route dispatches on path first and hostname second. All four API paths ride
 // the one x.spelunky2.net name on one port behind Traefik.
@@ -104,14 +106,29 @@ func (s *server) putLobby(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 404, map[string]any{"error": "not found"})
 }
 
-// nso is the Nintendo token check: the game posts whatever token the console
-// holds (nn::account cache) and the real server has Nintendo vouch for it.
-// Ours will ask nx-baas's /internal/switch/identity instead — an OpenPak
-// token is ours to accept — once the capture shows which field carries it.
+// nso is the Nintendo token check: the game posts the raw BAAS id_token as
+// the whole body and Mossmouth verifies it server-side. Ours is verified
+// against nx-baas's /internal/switch/identity instead — an OpenPak token is
+// ours to accept — and an accepted login earns the success packet
+// (sessions.go). A rejected one gets Mossmouth's own reject packet,
+// byte for byte, which is what the client already handles today.
 func (s *server) nso(w http.ResponseWriter, r *http.Request) {
-	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
-	log.Printf("[spelunky2] nso %s body=%s", logURL(r.URL), redactBody(body))
-	writeJSON(w, 404, map[string]any{"error": "not found"})
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<12))
+	tok := string(bytes.TrimSpace(body))
+	p, err := s.ids.byIDToken(tok)
+	if err != nil || tok == "" {
+		log.Printf("[spelunky2] nso rejected (%v)", shortErr(err))
+		writeOctets(w, rejectPacket)
+		return
+	}
+	sess, ok := s.sessions.forToken(tok, p)
+	if !ok {
+		log.Printf("[spelunky2] nso session mint failed")
+		writeOctets(w, rejectPacket)
+		return
+	}
+	log.Printf("[spelunky2] nso accepted player=%s session=%s", who(p.BaasUserID), sessionTag(sess))
+	writeOctets(w, successPacket(sess))
 }
 
 // misc covers /64b, whose purpose is still unknown.

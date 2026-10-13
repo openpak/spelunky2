@@ -1,5 +1,17 @@
 # Changelog — spelunky2
 
+## v0.2.0 — 2026-10-13
+
+**`/nso` verifies and answers.** The first live capture showed the game
+posting its raw BAAS id_token as the whole body and the real server speaking
+binary (18-byte reject packet, measured). This version verifies the token
+against nx-baas `/internal/switch/identity`, mints a remembered 16-byte
+session per token, and answers the hypothesized success packet
+(`session[16]` + status zero) — or Mossmouth's own reject packet,
+byte-for-byte, on any failure. The client's next request settles whether the
+hypothesis holds. Reached via nx-baas's new `NX_SPELUNKY2_URL` forward until
+the Traefik cutover.
+
 ## v0.1.0 — 2026-10-13
 
 **Capture stubs for Spelunky 2's own backend.** Static scan of the Switch
