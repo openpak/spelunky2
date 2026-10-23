@@ -47,7 +47,7 @@ calls follow a rejection.
 
 `/nso` carries the raw BAAS id_token as its whole body. This service verifies
 it against nx-baas `POST /internal/switch/identity`
-(`cmd/spelunky2d/identity.go`, same contract as `servers/klei`), which also
+(`cmd/spelunky2d/identity.go`, same contract as `platforms/switch/games/klei`), which also
 answers nickname, banned state and online presence. On success the service
 must return the success packet (§2 hypothesis); on rejection it returns the
 18-byte reject packet byte-for-byte.
@@ -75,7 +75,7 @@ Every accepted login already holds a connectivity lease
 component `rendezvous`, TTL 300, renewed by re-posted `/nso`). When a pair
 forms, the backend allocates a pair relay for the two lease IDs and binds it
 only after the game's own handshake proves each side's mapping toward the
-relay endpoint — IP matching alone never binds (servers/connectivity's rule,
+relay endpoint — IP matching alone never binds (openpak/connectivity's rule,
 and ours). Open transport questions for that phase: the game dials edge
 *names*, and UDP carries no SNI, so answering them needs per-name IPs or
 per-edge ports from the `/put`/`/get` capture — undecided until measured.

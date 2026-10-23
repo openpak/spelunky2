@@ -15,7 +15,7 @@
 // numbered relays (edge-%02d.spelunky2.net) over raw TCP+UDP sockets.
 //
 // Plain HTTP inside the pod network; Traefik terminates the guest's TLS for
-// these names and forwards the stream, the same arrangement as servers/klei,
+// these names and forwards the stream, the same arrangement as platforms/switch/games/klei,
 // servers/t17 and the Among Us front.
 //
 // The wire contract was read out of the Switch build's own executable

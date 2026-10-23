@@ -9,7 +9,7 @@ API on one port, dispatching on path:
 | `x.spelunky2.net` | `/get` — lobby fetch (join by code), `/put` — lobby publish (host), `/nso` — Nintendo token check, `/64b` — unknown |
 
 Plain HTTP on **22660** inside the pod network (health on **22661**); Traefik terminates the
-guest's TLS for this name, the same arrangement as [`servers/klei`](../klei) and
+guest's TLS for this name, the same arrangement as [`platforms/switch/games/klei`](../klei) and
 [`servers/t17`](../t17).
 
 `cdn.spelunky2.net` is deliberately **not** redirected: it serves the game's own static

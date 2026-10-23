@@ -42,7 +42,7 @@ this version.
 
 **Shared-connectivity leases.** Every accepted `/nso` registers one
 participant generation (`spelunky2` / session / verified player /
-`rendezvous`) with servers/connectivity, so the relay phase has lease IDs to
+`rendezvous`) with openpak/connectivity, so the relay phase has lease IDs to
 name when a host/joiner pair forms — two players behind one NAT stay two
 participants. Env-gated (`CONNECTIVITY_URL` + `CONNECTIVITY_TOKEN`), stdlib
 only, and never fatal: unconfigured or refused, the login succeeds unleashed

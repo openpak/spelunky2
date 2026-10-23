@@ -1,6 +1,6 @@
 package main
 
-// The shared connectivity service (servers/connectivity): participant leases
+// The shared connectivity service (openpak/connectivity): participant leases
 // so players behind one public IP stay distinct.
 //
 // On every accepted /nso this service registers one participant generation
@@ -13,7 +13,7 @@ package main
 // Unconfigured (CONNECTIVITY_URL empty) or failing, registration is skipped
 // with one log line and the login still succeeds: the rendezvous must never
 // break because the relay bookkeeping is down. Only stdlib here — the shape
-// follows servers/connectivity's contract, not its client package.
+// follows openpak/connectivity's contract, not its client package.
 
 import (
 	"bytes"
