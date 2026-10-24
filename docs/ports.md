@@ -9,6 +9,8 @@ Among Us (22600–22609), `servers/demonware` (22610–22619), `servers/eos` (22
 | 22660 | HTTP for `x.spelunky2.net` (behind Traefik, which terminates the guest's TLS) |
 | 22661 | `/health` |
 | 22662–22669 | reserved for this network |
+| 11937/udp | lobby server, the game's port (`spelunky-v20.mmo.gratis`) |
+| 7853/udp | run tickets and results, the game's port (`legacy-lbs.mmo.gratis`) |
 | 2816/udp | edge-probe listener (the game's fixed port, outside every plan range — see below) |
 
 One port serves all four API paths: they are distinguished by path, not by

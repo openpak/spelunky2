@@ -38,8 +38,10 @@ import (
 var (
 	addr       = flag.String("addr", ":22660", "HTTP listen address (Traefik terminates TLS in front)")
 	healthAddr = flag.String("health-addr", ":22661", "health listen address")
-	edgeAddr   = flag.String("edge-addr", ":2816", "UDP listen addresses, comma-separated (the game's ports; empty disables)")
-	edgeEcho   = flag.Bool("edge-echo", true, "answer each 2-byte probe with the hypothesized 20-byte echo reply")
+	edgeAddr   = flag.String("edge-addr", ":2816", "edge probe UDP listen addresses, comma-separated (empty disables)")
+	sessAddr   = flag.String("session-addr", ":29489", "edge session (stream hub) UDP listen address")
+	lobbyAddr  = flag.String("lobby-addr", ":11937", "lobby server UDP listen address (spelunky-v20.mmo.gratis)")
+	lbsAddr    = flag.String("lbs-addr", ":7853", "run ticket / result UDP listen address (legacy-lbs.mmo.gratis)")
 )
 
 func main() {
@@ -59,7 +61,14 @@ func main() {
 
 	log.Printf("[spelunky2] serving x.spelunky2.net on %s", *addr)
 	if *edgeAddr != "" {
-		go serveEdgeProbes(*edgeAddr, *edgeEcho)
+		go serveEdgeProbes(*edgeAddr, s.world)
+	}
+	go serveEdgeSessions(*sessAddr, s.world)
+	if *lobbyAddr != "" {
+		go serveLobby(*lobbyAddr, s.world)
+	}
+	if *lbsAddr != "" {
+		go serveLBS(*lbsAddr, newLBS(s.sessions))
 	}
 	log.Fatal(http.ListenAndServe(*addr, mux))
 }
@@ -68,6 +77,8 @@ type server struct {
 	ids      identityClient
 	sessions *sessions
 	conn     *connectivityClient
+	world    *world
+	progress *progressStore
 }
 
 func newServer(ids identityClient) *server {
@@ -75,7 +86,7 @@ func newServer(ids identityClient) *server {
 }
 
 func newServerWith(ids identityClient, conn *connectivityClient) *server {
-	return &server{ids: ids, sessions: newSessions(), conn: conn}
+	return &server{ids: ids, sessions: newSessions(), conn: conn, world: newWorld(), progress: newProgressStore()}
 }
 
 // route dispatches on path first and hostname second. All four API paths ride
@@ -93,30 +104,12 @@ func (s *server) route(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/nso":
 		s.nso(w, r)
 	case r.URL.Path == "/64b":
-		s.misc(w, r, "64b")
+		s.code(w, r)
 	default:
 		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
 		log.Printf("[spelunky2] !! unhandled %s %s%s body=%s", r.Method, host, logURL(r.URL), redactBody(body))
 		writeJSON(w, 404, map[string]any{"error": "not found"})
 	}
-}
-
-// The four handlers below are capture stubs: they log the redacted request so
-// the first Harbor boot writes the protocol spec, and answer 404 until the
-// shapes in docs/protocol.md are filled in and implemented.
-
-// getLobby is the join path: the guest asks for a lobby by its short code.
-func (s *server) getLobby(w http.ResponseWriter, r *http.Request) {
-	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
-	log.Printf("[spelunky2] get %s body=%s", logURL(r.URL), redactBody(body))
-	writeJSON(w, 404, map[string]any{"error": "not found"})
-}
-
-// putLobby is the host path: the host publishes its lobby for guests to fetch.
-func (s *server) putLobby(w http.ResponseWriter, r *http.Request) {
-	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
-	log.Printf("[spelunky2] put %s body=%s", logURL(r.URL), redactBody(body))
-	writeJSON(w, 404, map[string]any{"error": "not found"})
 }
 
 // nso is the Nintendo token check: the game posts the raw BAAS id_token as
@@ -145,11 +138,4 @@ func (s *server) nso(w http.ResponseWriter, r *http.Request) {
 	s.sessions.setLease(sess, lease)
 	log.Printf("[spelunky2] nso accepted player=%s session=%s lease=%s", who(p.BaasUserID), sessionTag(sess), leaseTag(lease))
 	writeOctets(w, successPacket(sess))
-}
-
-// misc covers /64b, whose purpose is still unknown.
-func (s *server) misc(w http.ResponseWriter, r *http.Request, what string) {
-	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
-	log.Printf("[spelunky2] %s %s body=%s", what, logURL(r.URL), redactBody(body))
-	writeJSON(w, 404, map[string]any{"error": "not found"})
 }

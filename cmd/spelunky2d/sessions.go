@@ -32,11 +32,12 @@ type sessions struct {
 	mu       sync.Mutex
 	byToken  map[string][16]byte
 	bySessID map[string]*player
-	leases   map[string]string // session hex -> connectivity lease ID ("" when unleashed)
+	leases   map[string]string   // session hex -> connectivity lease ID ("" when unleashed)
+	byKey    map[[8]byte]*player // first 8 session bytes: the key the client presents later
 }
 
 func newSessions() *sessions {
-	return &sessions{byToken: map[string][16]byte{}, bySessID: map[string]*player{}, leases: map[string]string{}}
+	return &sessions{byToken: map[string][16]byte{}, bySessID: map[string]*player{}, leases: map[string]string{}, byKey: map[[8]byte]*player{}}
 }
 
 // forToken returns the session for this token, minting and remembering it on
@@ -54,7 +55,26 @@ func (st *sessions) forToken(tok string, p *player) (sess [16]byte, ok bool) {
 	}
 	st.byToken[key] = sess
 	st.bySessID[string(sess[:])] = p
+	var k [8]byte
+	copy(k[:], sess[:8])
+	st.byKey[k] = p
 	return sess, true
+}
+
+// byKeyIn finds the player whose session key appears 8-byte aligned in b. The client puts
+// [NSA id][session key] at the front of its UDP lobby-create and report packets and mixes
+// both into the 64-byte header of /64b, /get and /put, so an aligned scan finds it in all.
+func (st *sessions) byKeyIn(b []byte) (*player, [8]byte, bool) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	var k [8]byte
+	for i := 0; i+8 <= len(b) && i < 64; i += 8 {
+		copy(k[:], b[i:i+8])
+		if p, ok := st.byKey[k]; ok {
+			return p, k, true
+		}
+	}
+	return nil, k, false
 }
 
 // setLease remembers the connectivity lease a session earned ("" when the

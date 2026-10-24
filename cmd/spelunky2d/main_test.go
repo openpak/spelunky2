@@ -16,22 +16,6 @@ func testServer() *server {
 	return newServer(identityClient{})
 }
 
-func TestStubPathsAnswer404JSON(t *testing.T) {
-	s := testServer()
-	for _, path := range []string{"/get", "/put", "/64b", "/nope"} {
-		req := httptest.NewRequest(http.MethodPost, "https://x.spelunky2.net"+path, strings.NewReader(`{"code":"ABCD"}`))
-		rec := httptest.NewRecorder()
-		s.route(rec, req)
-		if rec.Code != http.StatusNotFound {
-			t.Errorf("%s: got %d, want 404", path, rec.Code)
-		}
-		var v map[string]any
-		if err := json.Unmarshal(rec.Body.Bytes(), &v); err != nil {
-			t.Errorf("%s: body is not JSON: %v", path, err)
-		}
-	}
-}
-
 func fakeIdentity(t *testing.T, status int) (identityClient, func()) {
 	t.Helper()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

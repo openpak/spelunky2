@@ -101,3 +101,63 @@ until then logins go unleashed.
    + `NX_INTERNAL_KEY`; publish 22661 for `/health` (internal).
 4. Update the website catalog row (Spelunky 2, `01007EC013ABC000`): backend
    `spelunky2.net`, notes with the live status.
+
+## 7. Measured 2026-10-24: the whole online stack
+
+Read out of the v1.28.0 client (disassembly) and checked against Mossmouth's live hosts with
+single probe packets. This section supersedes the hypotheses above where they differ.
+
+### Hosts
+
+| Host | Transport | Role |
+| --- | --- | --- |
+| `x.spelunky2.net` | HTTPS | `/nso`, `/64b`, `/get`, `/put` |
+| `edge-NN.spelunky2.net` | UDP 2816 | edge probe (only edge-01..16 exist at Mossmouth) |
+| `edge-NN.spelunky2.net` | UDP 29489 | gameplay stream hub |
+| `spelunky-v20.mmo.gratis` | UDP 11937 | lobby server |
+| `legacy-lbs.mmo.gratis` | UDP 7853 | ranked-run ticket and results |
+| `cdn.spelunky2.net/static/<yyyymmdd>` | HTTPS | daily-challenge board (zstd, ~67 MB raw) |
+
+The `.mmo.gratis` names are a second domain; without them in the ceiling the lobby phase goes
+to Mossmouth.
+
+### `/nso` reply (18 bytes)
+
+`[0:8]` session key (the client presents it to every later call), `[8:16]` must be non-zero or
+the client opens the "Nintendo Switch Online required" applet, `[16]` status (`0xff` =
+rejected), `[17]` server protocol version (the client refuses anything above 20).
+
+### Edge probe
+
+`{edge_index, 20}` in, one byte out: the edge index. Only byte 0 is read.
+
+### Lobby server (11937)
+
+Client state packet, sent every 0.5-1 s until it has a session:
+`[lobby u64: 0 idle, ~0 create, else join][seq u32][lobby version u32][slot u8][edge RTT x32]`
+zero-padded to 0x38, then the player record
+`[name len][7 zero][player id u64][option u32][?][platform<<2|ready][character][name]`
+(23 + name length bytes).
+
+Reply: `[edge number u64, 1-based][session id u64][lobby id u64][seq echo u32][version u32]
+[slot u8][edge RTT echo]` padded to 0x48, then the four records in slot order (one zero byte
+for an empty slot). The client ignores a reply whose seq differs from its own and compares
+lobby ids without their low five bits. Mossmouth answers an unknown lobby with lobby id 0.
+
+### Edge stream hub (29489)
+
+Client: `[session id 8][bytes held of slot 0..3, 4 x u32][u32 off<<8|len][<=124 bytes]`.
+Edge: `[u8 presence<<4 | chunk mask][u24 bytes of the client's stream held]`, then for each
+mask bit in slot order `[u32 off<<8|len][bytes]`. 10 s of silence ends the session.
+
+### `legacy-lbs` (7853)
+
+`[NSA id][session key]` (16 bytes, up to five tries) is answered with an 8-byte run ticket;
+the run's result is `[NSA id][key][ticket][3 x u64][name 32]`, 20 copies, unanswered.
+
+### `/64b`, `/get`, `/put`
+
+Each body starts with a 64-byte header the client derives from the NSA id, the session key,
+a build constant and a clock through a ChaCha-style proof of work. `/64b` answers a u32 of
+five 5-bit indexes into `QWERTYUPASDFGHJKLXCVBMN023456789`; `/get` answers the 0x3620-byte
+progress block the client ORs into its save; `/put` sends it.

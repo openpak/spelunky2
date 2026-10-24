@@ -1,5 +1,15 @@
 # Changelog — spelunky2
 
+## v0.7.0 — 2026-10-24
+
+**The whole online stack, from the client's own code.** The lobby server
+(`spelunky-v20.mmo.gratis`, 11937/udp: create, join, four-slot records, session
+assignment), the edge stream hub on 29489/udp (per-slot byte streams with acks and
+fan-out; replaces the dumb relay), run tickets and results on 7853/udp
+(`legacy-lbs.mmo.gratis`), and `/64b`, `/get`, `/put` (player code, progress block).
+Edge probes now get the one-byte answer Mossmouth's edges give. The `.mmo.gratis` names
+need the signed ceiling before consoles reach them. Formats: docs/protocol.md §7.
+
 ## v0.6.0 — 2026-10-13
 
 **Dumb relay between gameplay senders.** The 152-byte session packets two
