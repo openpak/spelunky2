@@ -164,3 +164,10 @@ of the NSA id survives the chaining, so the token itself is the key: our `/64b` 
 stored progress block are both looked up by it. `/64b` answers a u32 of
 five 5-bit indexes into `QWERTYUPASDFGHJKLXCVBMN023456789`; `/get` answers the 0x3620-byte
 progress block the client ORs into its save; `/put` sends it.
+
+The token's first four bytes are the low half of the NSA id in the clear, which ties a
+`/64b` code to the player id in that player's lobby record. The code is refreshed every
+5 minutes and shown as five characters (index `i` = bits `5i..5i+4`); the client's
+"Enter Code" keyboard decodes typed characters back the same way (`1` is read as `L`).
+spelunky2d makes a host's lobby id its code, so a typed code names the lobby
+(whether the client sends the code as is or shifted by five bits is still to be measured).

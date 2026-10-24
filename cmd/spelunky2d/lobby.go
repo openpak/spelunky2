@@ -27,6 +27,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"log"
+	"math/bits"
 	"net"
 	"sync"
 	"time"
@@ -50,6 +51,7 @@ type member struct {
 	pings    [32]byte
 	seq      uint32
 	sess     uint64
+	view     uint64 // the lobby id as this player asked for it (echoed in its replies)
 	lastSeen time.Time
 
 	// edge side (edge.go)
@@ -70,11 +72,12 @@ type world struct {
 	lobbies map[uint32]*lobby
 	byPID   map[uint64]*member
 	bySess  map[uint64]*member
+	codes   map[uint32]uint32 // low half of the NSA id -> the /64b code we gave that player
 	now     func() time.Time
 }
 
 func newWorld() *world {
-	return &world{lobbies: map[uint32]*lobby{}, byPID: map[uint64]*member{}, bySess: map[uint64]*member{}, now: time.Now}
+	return &world{lobbies: map[uint32]*lobby{}, byPID: map[uint64]*member{}, bySess: map[uint64]*member{}, codes: map[uint32]uint32{}, now: time.Now}
 }
 
 // recordLen is the client's own rule for how long a record is.
@@ -155,7 +158,7 @@ func (w *world) handleState(pkt []byte) []byte {
 			w.createLocked(m)
 		}
 	default:
-		if m.lob == nil || !sameLobby(m.lob.id, lobbyField) {
+		if m.lob == nil || (m.view^lobbyField)>>5 != 0 {
 			w.leaveLocked(m)
 			w.joinLocked(m, lobbyField)
 		}
@@ -175,36 +178,62 @@ func sameLobby(id uint32, field uint64) bool {
 	return (uint64(id)^field)>>5 == 0
 }
 
+// noteCode remembers which code /64b gave a player. The client's token starts with the low
+// half of its NSA id, so the code can be tied to the player id in its lobby record.
+func (w *world) noteCode(nsaLow, code uint32) {
+	w.mu.Lock()
+	w.codes[nsaLow] = code
+	w.mu.Unlock()
+}
+
+// createLocked opens a lobby for m. When m has fetched its /64b code, the lobby id is that
+// code: the code is what the lobby screen shows and what a friend types to join.
 func (w *world) createLocked(m *member) {
-	var id uint32
-	for id == 0 || w.lobbies[id] != nil {
-		id = uint32(rand64())
+	code, known := w.codes[uint32(m.pid)]
+	id := code
+	if !known || id == 0 || w.lobbies[id] != nil {
+		known, id = false, 0
+		for id == 0 || w.lobbies[id] != nil {
+			id = uint32(rand64())
+		}
 	}
 	l := &lobby{id: id, ver: 1, edge: bestEdge(m.pings)}
 	w.lobbies[id] = l
 	l.slots[0] = m
-	m.lob, m.slot = l, 0
-	log.Printf("[spelunky2] lobby %s created by %s edge=%d", redact.Tag(id), redact.Tag(m.pid), l.edge)
+	m.lob, m.slot, m.view = l, 0, uint64(id)
+	log.Printf("[spelunky2] lobby %s created by %s edge=%d id-is-code=%v", redact.Tag(id), redact.Tag(m.pid), l.edge, known)
+}
+
+// findLobbyLocked resolves a join request's lobby field: a lobby id (the client's own
+// comparison), else the field as a code, either as is or shifted up past the five bits the
+// client's comparison ignores.
+func (w *world) findLobbyLocked(field uint64) (*lobby, string) {
+	for _, c := range w.lobbies {
+		if sameLobby(c.id, field) {
+			return c, "id"
+		}
+	}
+	if l := w.lobbies[uint32(field)&0x1ffffff]; l != nil && field>>32 == 0 {
+		return l, "code"
+	}
+	if l := w.lobbies[uint32(field>>5)]; l != nil && field>>37 == 0 {
+		return l, "code<<5"
+	}
+	return nil, ""
 }
 
 func (w *world) joinLocked(m *member, field uint64) {
-	var l *lobby
-	for _, c := range w.lobbies {
-		if sameLobby(c.id, field) {
-			l = c
-			break
-		}
-	}
+	l, how := w.findLobbyLocked(field)
 	if l == nil {
-		log.Printf("[spelunky2] lobby join by %s: no such lobby", redact.Tag(m.pid))
+		log.Printf("[spelunky2] lobby join by %s: no such lobby (field %d bits, low5=%d)", redact.Tag(m.pid), bits.Len64(field), field&0x1f)
 		return
 	}
 	for i := range l.slots {
 		if l.slots[i] == nil {
 			l.slots[i] = m
-			m.lob, m.slot = l, i
+			m.lob, m.slot, m.view = l, i, field
 			l.ver++
-			log.Printf("[spelunky2] lobby %s joined by %s slot=%d", redact.Tag(l.id), redact.Tag(m.pid), i)
+			log.Printf("[spelunky2] lobby %s joined by %s slot=%d via=%s", redact.Tag(l.id), redact.Tag(m.pid), i, how)
 			return
 		}
 	}
@@ -259,7 +288,7 @@ func (w *world) replyLocked(m *member) []byte {
 	out := make([]byte, replyHeader, replyHeader+4*0x37)
 	binary.LittleEndian.PutUint64(out[0:], uint64(l.edge))
 	binary.LittleEndian.PutUint64(out[8:], m.sess)
-	binary.LittleEndian.PutUint64(out[0x10:], uint64(l.id))
+	binary.LittleEndian.PutUint64(out[0x10:], m.view)
 	binary.LittleEndian.PutUint32(out[0x18:], m.seq)
 	binary.LittleEndian.PutUint32(out[0x1c:], l.ver)
 	out[0x20] = byte(m.slot)

@@ -130,3 +130,25 @@ func TestProgressRoundTripByToken(t *testing.T) {
 		t.Fatalf("64b %x / %x", a, b)
 	}
 }
+
+func TestLobbyIdIsTheHostCode(t *testing.T) {
+	s := testServer()
+	w := s.world
+	tok := bytes.Repeat([]byte{7}, reqHeader)
+	binary.LittleEndian.PutUint32(tok, 11) // the token starts with the low half of the NSA id
+	rec := httptest.NewRecorder()
+	s.route(rec, httptest.NewRequest(http.MethodPost, "https://x.spelunky2.net/64b", bytes.NewReader(tok)))
+	code := binary.LittleEndian.Uint32(rec.Body.Bytes())
+
+	h := w.handleState(statePacket(lobbyCreate, 1, record("host", 11)))
+	if id := binary.LittleEndian.Uint64(h[0x10:]); id != uint64(code) {
+		t.Fatalf("lobby id %x, want the host's code %x", id, code)
+	}
+	for _, field := range []uint64{uint64(code), uint64(code) << 5} {
+		j := w.handleState(statePacket(field, 1, record("join", 22)))
+		if binary.LittleEndian.Uint64(j[0x10:]) != field || j[0x20] != 1 {
+			t.Fatalf("join with %x: reply %x", field, j[:0x48])
+		}
+		w.handleState(statePacket(0, 2, record("join", 22)))
+	}
+}

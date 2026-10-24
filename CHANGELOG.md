@@ -1,5 +1,13 @@
 # Changelog — spelunky2
 
+## v0.7.2 — 2026-10-24
+
+A lobby's id is its host's `/64b` code when the host has fetched one: the code is what the
+client shows and what a friend types (the client's code entry packs five 5-bit indexes,
+low first). A join resolves the lobby field as a lobby id, then as a code (as is or
+shifted past the five bits the client's comparison ignores), and each player's replies
+echo the id the way that player asked for it.
+
 ## v0.7.1 — 2026-10-24
 
 `/64b`, `/get` and `/put` key on the client's 64-byte save token instead of looking for the
