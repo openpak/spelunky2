@@ -1,5 +1,15 @@
 # Changelog — spelunky2
 
+## v0.7.3 — 2026-10-24
+
+**Two consoles play together.** Measured in Harbor with two accounts: host, join by code,
+ready, and both play the same level with each other's moves. A lobby hands out the edge
+and the gameplay sessions only once every player in it is ready: a client given a session
+at once stops sending its state and never reaches the edge, so its lobby went stale and
+a friend's join found nothing. The code the lobby screen shows ("Your Code", eight hex
+digits) is the lobby id itself, and a typed code arrives as the lobby field, so v0.7.2's
+code-as-lobby-id mapping is gone again (`/64b` is not called on that path).
+
 ## v0.7.2 — 2026-10-24
 
 A lobby's id is its host's `/64b` code when the host has fetched one: the code is what the

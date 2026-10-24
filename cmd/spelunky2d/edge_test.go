@@ -31,7 +31,7 @@ func record(name string, pid uint64) []byte {
 	r := make([]byte, 0x17+len(name))
 	r[0] = byte(len(name))
 	binary.LittleEndian.PutUint64(r[8:], pid)
-	r[0x15] = 0x20 << 2
+	r[0x15] = 0x20<<2 | 1 // ready
 	copy(r[0x17:], name)
 	return r
 }
@@ -131,24 +131,25 @@ func TestProgressRoundTripByToken(t *testing.T) {
 	}
 }
 
-func TestLobbyIdIsTheHostCode(t *testing.T) {
-	s := testServer()
-	w := s.world
-	tok := bytes.Repeat([]byte{7}, reqHeader)
-	binary.LittleEndian.PutUint32(tok, 11) // the token starts with the low half of the NSA id
-	rec := httptest.NewRecorder()
-	s.route(rec, httptest.NewRequest(http.MethodPost, "https://x.spelunky2.net/64b", bytes.NewReader(tok)))
-	code := binary.LittleEndian.Uint32(rec.Body.Bytes())
-
-	h := w.handleState(statePacket(lobbyCreate, 1, record("host", 11)))
-	if id := binary.LittleEndian.Uint64(h[0x10:]); id != uint64(code) {
-		t.Fatalf("lobby id %x, want the host's code %x", id, code)
+func TestNoSessionUntilEveryoneIsReady(t *testing.T) {
+	w := newWorld()
+	host := record("host", 11)
+	host[0x15] &^= 1
+	h := w.handleState(statePacket(lobbyCreate, 1, host))
+	id := binary.LittleEndian.Uint64(h[0x10:])
+	if id == 0 || binary.LittleEndian.Uint64(h[0:]) != 0 || binary.LittleEndian.Uint64(h[8:]) != 0 {
+		t.Fatalf("unready host got %x", h[:0x18])
 	}
-	for _, field := range []uint64{uint64(code), uint64(code) << 5} {
-		j := w.handleState(statePacket(field, 1, record("join", 22)))
-		if binary.LittleEndian.Uint64(j[0x10:]) != field || j[0x20] != 1 {
-			t.Fatalf("join with %x: reply %x", field, j[:0x48])
-		}
-		w.handleState(statePacket(0, 2, record("join", 22)))
+	j := w.handleState(statePacket(id, 1, record("join", 22)))
+	if j[0x20] != 1 || binary.LittleEndian.Uint64(j[8:]) != 0 {
+		t.Fatalf("join before the host is ready: %x", j[:0x21])
+	}
+	host[0x15] |= 1
+	h = w.handleState(statePacket(lobbyCreate, 2, host))
+	if binary.LittleEndian.Uint64(h[0:]) == 0 || binary.LittleEndian.Uint64(h[8:]) == 0 {
+		t.Fatalf("all ready, host still without a session: %x", h[:0x18])
+	}
+	if j = w.handleState(statePacket(id, 2, record("join", 22))); binary.LittleEndian.Uint64(j[8:]) == 0 {
+		t.Fatal("all ready, joiner still without a session")
 	}
 }

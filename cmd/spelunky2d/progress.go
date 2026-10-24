@@ -66,7 +66,6 @@ func (s *server) code(w http.ResponseWriter, r *http.Request) {
 	var out [4]byte
 	code := tokenCode(body[:reqHeader])
 	binary.LittleEndian.PutUint32(out[:], code)
-	s.world.noteCode(binary.LittleEndian.Uint32(body[0:4]), code)
 	log.Printf("[spelunky2] 64b token=%s", redact.Tag(body[:reqHeader]))
 	writeOctets(w, out[:])
 }

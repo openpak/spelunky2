@@ -18,16 +18,15 @@ package main
 // the lobby version, the player's slot, its edge table) padded to 0x48, then the four
 // lobby records in slot order. The client drops a reply whose seq is not its own.
 //
-// The gameplay session is assigned at once: the session id and the edge go out in the
-// first reply that puts the player in a lobby. The client stops sending state when it has
-// a session, so everything later (players joining, ready flags, characters) travels on
-// the edge streams, not here.
+// The gameplay session is assigned when every player in the lobby is ready (measured
+// 2026-10-24 in Harbor: a client given a session at once stops sending state and never
+// reaches the edge, so its lobby goes stale). Until then the replies carry the lobby's
+// records with no edge and no session, and the clients keep sending their state.
 
 import (
 	"crypto/rand"
 	"encoding/binary"
 	"log"
-	"math/bits"
 	"net"
 	"sync"
 	"time"
@@ -51,7 +50,6 @@ type member struct {
 	pings    [32]byte
 	seq      uint32
 	sess     uint64
-	view     uint64 // the lobby id as this player asked for it (echoed in its replies)
 	lastSeen time.Time
 
 	// edge side (edge.go)
@@ -65,6 +63,9 @@ type lobby struct {
 	ver   uint32
 	edge  byte // 1-based edge number every member is sent to
 	slots [maxSlots]*member
+
+	started bool // every player was ready once: sessions are handed out
+
 }
 
 type world struct {
@@ -72,12 +73,11 @@ type world struct {
 	lobbies map[uint32]*lobby
 	byPID   map[uint64]*member
 	bySess  map[uint64]*member
-	codes   map[uint32]uint32 // low half of the NSA id -> the /64b code we gave that player
 	now     func() time.Time
 }
 
 func newWorld() *world {
-	return &world{lobbies: map[uint32]*lobby{}, byPID: map[uint64]*member{}, bySess: map[uint64]*member{}, codes: map[uint32]uint32{}, now: time.Now}
+	return &world{lobbies: map[uint32]*lobby{}, byPID: map[uint64]*member{}, bySess: map[uint64]*member{}, now: time.Now}
 }
 
 // recordLen is the client's own rule for how long a record is.
@@ -144,6 +144,9 @@ func (w *world) handleState(pkt []byte) []byte {
 		m = &member{pid: pid, slot: -1}
 		w.byPID[pid] = m
 	}
+	if len(rec) > 21 && (len(m.record) <= 21 || m.record[21] != rec[21]) {
+		log.Printf("[spelunky2] lobby: %s flags=%#x", redact.Tag(pid), rec[21])
+	}
 	m.record = append(m.record[:0], rec...)
 	m.pings = pings
 	m.seq = seq
@@ -158,7 +161,7 @@ func (w *world) handleState(pkt []byte) []byte {
 			w.createLocked(m)
 		}
 	default:
-		if m.lob == nil || (m.view^lobbyField)>>5 != 0 {
+		if m.lob == nil || !sameLobby(m.lob.id, lobbyField) {
 			w.leaveLocked(m)
 			w.joinLocked(m, lobbyField)
 		}
@@ -166,74 +169,74 @@ func (w *world) handleState(pkt []byte) []byte {
 	if m.lob == nil {
 		return idleReply(seq)
 	}
-	if m.sess == 0 {
+	l := m.lob
+	if !l.started && l.allReady() {
+		l.started = true
+		log.Printf("[spelunky2] lobby %s: everyone ready, sessions on edge %d", redact.Tag(l.id), l.edge)
+	}
+	if l.started && m.sess == 0 {
 		m.sess = rand64()
 		w.bySess[m.sess] = m
 	}
 	return w.replyLocked(m)
 }
 
+// ready is the record's ready flag ([21] = platform<<2 | ready).
+func ready(rec []byte) bool { return len(rec) > 21 && rec[21]&1 != 0 }
+
+// allReady: the game starts once every player in the lobby has readied up. Until then
+// replies carry no edge and no session, which keeps the clients sending their state.
+func (l *lobby) allReady() bool {
+	n := 0
+	for _, s := range l.slots {
+		if s == nil {
+			continue
+		}
+		if !ready(s.record) {
+			return false
+		}
+		n++
+	}
+	return n > 0
+}
+
 // sameLobby is the client's own comparison: the low five bits of a lobby id do not count.
+// The lobby id is the code the client shows ("Your Code", eight hex digits) and the code a
+// friend types to join (measured 2026-10-24: the typed code arrives as the lobby field).
 func sameLobby(id uint32, field uint64) bool {
 	return (uint64(id)^field)>>5 == 0
 }
 
-// noteCode remembers which code /64b gave a player. The client's token starts with the low
-// half of its NSA id, so the code can be tied to the player id in its lobby record.
-func (w *world) noteCode(nsaLow, code uint32) {
-	w.mu.Lock()
-	w.codes[nsaLow] = code
-	w.mu.Unlock()
-}
-
-// createLocked opens a lobby for m. When m has fetched its /64b code, the lobby id is that
-// code: the code is what the lobby screen shows and what a friend types to join.
 func (w *world) createLocked(m *member) {
-	code, known := w.codes[uint32(m.pid)]
-	id := code
-	if !known || id == 0 || w.lobbies[id] != nil {
-		known, id = false, 0
-		for id == 0 || w.lobbies[id] != nil {
-			id = uint32(rand64())
-		}
+	var id uint32
+	for id == 0 || w.lobbies[id] != nil {
+		id = uint32(rand64())
 	}
 	l := &lobby{id: id, ver: 1, edge: bestEdge(m.pings)}
 	w.lobbies[id] = l
 	l.slots[0] = m
-	m.lob, m.slot, m.view = l, 0, uint64(id)
-	log.Printf("[spelunky2] lobby %s created by %s edge=%d id-is-code=%v", redact.Tag(id), redact.Tag(m.pid), l.edge, known)
-}
-
-// findLobbyLocked resolves a join request's lobby field: a lobby id (the client's own
-// comparison), else the field as a code, either as is or shifted up past the five bits the
-// client's comparison ignores.
-func (w *world) findLobbyLocked(field uint64) (*lobby, string) {
-	for _, c := range w.lobbies {
-		if sameLobby(c.id, field) {
-			return c, "id"
-		}
-	}
-	if l := w.lobbies[uint32(field)&0x1ffffff]; l != nil && field>>32 == 0 {
-		return l, "code"
-	}
-	if l := w.lobbies[uint32(field>>5)]; l != nil && field>>37 == 0 {
-		return l, "code<<5"
-	}
-	return nil, ""
+	m.lob, m.slot = l, 0
+	log.Printf("[spelunky2] lobby %s created by %s edge=%d", redact.Tag(id), redact.Tag(m.pid), l.edge)
 }
 
 func (w *world) joinLocked(m *member, field uint64) {
-	l, how := w.findLobbyLocked(field)
+	var l *lobby
+	for _, c := range w.lobbies {
+		if sameLobby(c.id, field) {
+			l = c
+			break
+		}
+	}
 	if l == nil {
-		log.Printf("[spelunky2] lobby join by %s: no such lobby (field %d bits, low5=%d)", redact.Tag(m.pid), bits.Len64(field), field&0x1f)
+		log.Printf("[spelunky2] lobby join by %s: no such lobby", redact.Tag(m.pid))
 		return
 	}
 	for i := range l.slots {
 		if l.slots[i] == nil {
 			l.slots[i] = m
-			m.lob, m.slot, m.view = l, i, field
+			m.lob, m.slot = l, i
 			l.ver++
-			log.Printf("[spelunky2] lobby %s joined by %s slot=%d via=%s", redact.Tag(l.id), redact.Tag(m.pid), i, how)
+			log.Printf("[spelunky2] lobby %s joined by %s slot=%d", redact.Tag(l.id), redact.Tag(m.pid), i)
 			return
 		}
 	}
@@ -286,9 +289,11 @@ func idleReply(seq uint32) []byte {
 func (w *world) replyLocked(m *member) []byte {
 	l := m.lob
 	out := make([]byte, replyHeader, replyHeader+4*0x37)
-	binary.LittleEndian.PutUint64(out[0:], uint64(l.edge))
-	binary.LittleEndian.PutUint64(out[8:], m.sess)
-	binary.LittleEndian.PutUint64(out[0x10:], m.view)
+	if m.sess != 0 {
+		binary.LittleEndian.PutUint64(out[0:], uint64(l.edge))
+		binary.LittleEndian.PutUint64(out[8:], m.sess)
+	}
+	binary.LittleEndian.PutUint64(out[0x10:], uint64(l.id))
 	binary.LittleEndian.PutUint32(out[0x18:], m.seq)
 	binary.LittleEndian.PutUint32(out[0x1c:], l.ver)
 	out[0x20] = byte(m.slot)

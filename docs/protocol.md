@@ -165,9 +165,21 @@ stored progress block are both looked up by it. `/64b` answers a u32 of
 five 5-bit indexes into `QWERTYUPASDFGHJKLXCVBMN023456789`; `/get` answers the 0x3620-byte
 progress block the client ORs into its save; `/put` sends it.
 
-The token's first four bytes are the low half of the NSA id in the clear, which ties a
-`/64b` code to the player id in that player's lobby record. The code is refreshed every
-5 minutes and shown as five characters (index `i` = bits `5i..5i+4`); the client's
-"Enter Code" keyboard decodes typed characters back the same way (`1` is read as `L`).
-spelunky2d makes a host's lobby id its code, so a typed code names the lobby
-(whether the client sends the code as is or shifted by five bits is still to be measured).
+The token's first four bytes are the low half of the NSA id in the clear. `/64b`, `/get`
+and `/put` were not called during a full lobby + play session in Harbor (2026-10-24);
+what triggers them is still open.
+
+### Measured 2026-10-24 in Harbor (two consoles)
+
+- "Your Code" on the lobby screen is the lobby id as eight hex digits; "Enter Code" sends
+  the typed value as the lobby field of the joiner's state packet.
+- Every state packet's record carries the ready flag in byte 21 bit 0 (`0x80` idle,
+  `0x81` ready on Switch). The client keeps sending its state (and reads the lobby's
+  records from the replies) until a reply carries an edge and a session; then it moves
+  to the edge. spelunky2d hands both out once every player in the lobby is ready.
+- On the edge the hub's per-slot fan-out (others' streams only, no echo of one's own)
+  is enough: both consoles ran the same level in step, each seeing the other's moves,
+  for several minutes. A player leaving mid-level leaves the other playing on.
+- Daily Challenge: `legacy-lbs` gets the ticket request at the start and the result when
+  the run ends. The leaderboard screen still shows Mossmouth's board
+  (`cdn.spelunky2.net` is not redirected).
