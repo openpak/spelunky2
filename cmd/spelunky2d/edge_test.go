@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -103,5 +106,27 @@ func TestLobbyCreateJoinAndHub(t *testing.T) {
 	out = w.handleSession(sess(js, [4]uint32{2, 0, 0, 0}, 0, nil), ja)
 	if out[0].pkt[0]&0x0f != 0 || len(out[0].pkt) != 4 {
 		t.Fatalf("joiner answer %x, want header only", out[0].pkt)
+	}
+}
+
+func TestProgressRoundTripByToken(t *testing.T) {
+	s := testServer()
+	tok := bytes.Repeat([]byte{7}, reqHeader)
+	block := bytes.Repeat([]byte{0x5a}, progressBlock)
+	post := func(path string, body []byte) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		s.route(rec, httptest.NewRequest(http.MethodPost, "https://x.spelunky2.net"+path, bytes.NewReader(body)))
+		return rec
+	}
+	if got := post("/get", tok).Body.Len(); got != 0 {
+		t.Fatalf("get before put: %d bytes", got)
+	}
+	post("/put", append(append([]byte(nil), tok...), block...))
+	if got := post("/get", tok).Body.Bytes(); !bytes.Equal(got, block) {
+		t.Fatalf("get after put: %d bytes", len(got))
+	}
+	a, b := post("/64b", tok).Body.Bytes(), post("/64b", tok).Body.Bytes()
+	if len(a) != 4 || !bytes.Equal(a, b) || binary.LittleEndian.Uint32(a) > 0x1ffffff {
+		t.Fatalf("64b %x / %x", a, b)
 	}
 }

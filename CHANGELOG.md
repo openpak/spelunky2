@@ -1,5 +1,11 @@
 # Changelog — spelunky2
 
+## v0.7.1 — 2026-10-24
+
+`/64b`, `/get` and `/put` key on the client's 64-byte save token instead of looking for the
+session key in it: emulating the client's token builder showed the key does not survive the
+proof-of-work chaining. Progress blocks are kept in memory.
+
 ## v0.7.0 — 2026-10-24
 
 **The whole online stack, from the client's own code.** The lobby server

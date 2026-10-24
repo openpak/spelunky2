@@ -157,7 +157,10 @@ the run's result is `[NSA id][key][ticket][3 x u64][name 32]`, 20 copies, unansw
 
 ### `/64b`, `/get`, `/put`
 
-Each body starts with a 64-byte header the client derives from the NSA id, the session key,
-a build constant and a clock through a ChaCha-style proof of work. `/64b` answers a u32 of
+Each body starts with a 64-byte token the client makes once per save from the NSA id, the
+session key, a build constant and a clock, chained through a ChaCha-style round function
+until a 25-bit proof-of-work condition holds, and then keeps in the save. Only the top half
+of the NSA id survives the chaining, so the token itself is the key: our `/64b` code and the
+stored progress block are both looked up by it. `/64b` answers a u32 of
 five 5-bit indexes into `QWERTYUPASDFGHJKLXCVBMN023456789`; `/get` answers the 0x3620-byte
 progress block the client ORs into its save; `/put` sends it.
