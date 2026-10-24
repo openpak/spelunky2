@@ -114,6 +114,8 @@ func (w *world) handleSession(pkt []byte, src *net.UDPAddr) []outPacket {
 	}
 	m.edgeAddr = src
 	m.lastSeen = w.now()
+	m.inPkts++
+	m.inBytes += len(pkt)
 	for i := 0; i < 4; i++ {
 		m.acked[i] = binary.LittleEndian.Uint32(pkt[8+4*i:])
 	}
@@ -128,6 +130,20 @@ func (w *world) handleSession(pkt []byte, src *net.UDPAddr) []outPacket {
 	if off <= len(m.stream) && off+n > len(m.stream) && off+n <= streamCap {
 		m.stream = append(m.stream, data[len(m.stream)-off:]...)
 		grew = true
+		m.accepted++
+	} else if n > 0 {
+		m.rejected++
+		if m.rejected <= 5 {
+			log.Printf("[spelunky2] edge: %s slot=%d chunk dropped off=%d len=%d held=%d hdr=%x", redact.Tag(m.pid), m.slot, off, n, len(m.stream), pkt[:sessionHeader])
+		}
+	}
+	if m.inPkts <= 3 {
+		log.Printf("[spelunky2] edge: %s slot=%d packet #%d len=%d hdr=%x", redact.Tag(m.pid), m.slot, m.inPkts, len(pkt), pkt[8:sessionHeader])
+	}
+	if now := w.now(); now.Sub(m.lastStat) >= 5*time.Second {
+		m.lastStat = now
+		log.Printf("[spelunky2] edge stats: %s slot=%d lobby=%s in=%dpk/%dB out=%dpk/%dB stream=%dB chunks ok=%d dropped=%d acked=%v",
+			redact.Tag(m.pid), m.slot, redact.Tag(m.lob.id), m.inPkts, m.inBytes, m.outPkts, m.outBytes, len(m.stream), m.accepted, m.rejected, m.acked)
 	}
 
 	out := []outPacket{{m.edgeAddr, w.edgePacketLocked(m)}}
@@ -135,6 +151,14 @@ func (w *world) handleSession(pkt []byte, src *net.UDPAddr) []outPacket {
 		for _, o := range m.lob.slots {
 			if o != nil && o != m && o.edgeAddr != nil {
 				out = append(out, outPacket{o.edgeAddr, w.edgePacketLocked(o)})
+			}
+		}
+	}
+	for _, o := range out {
+		for _, s := range m.lob.slots {
+			if s != nil && s.edgeAddr == o.to {
+				s.outPkts++
+				s.outBytes += len(o.pkt)
 			}
 		}
 	}

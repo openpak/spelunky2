@@ -56,6 +56,10 @@ type member struct {
 	edgeAddr *net.UDPAddr
 	stream   []byte    // this player's byte stream, as the edge has it
 	acked    [4]uint32 // how much of each slot's stream this player says it has
+
+	// counters, per edge stream (reset when the member leaves its lobby)
+	inPkts, outPkts, inBytes, outBytes, accepted, rejected int
+	lastStat                                               time.Time
 }
 
 type lobby struct {
@@ -257,6 +261,7 @@ func (w *world) leaveLocked(m *member) {
 		m.sess = 0
 	}
 	m.stream, m.acked, m.edgeAddr = nil, [4]uint32{}, nil
+	m.inPkts, m.outPkts, m.inBytes, m.outBytes, m.accepted, m.rejected = 0, 0, 0, 0, 0, 0
 	empty := true
 	for _, s := range l.slots {
 		if s != nil {
