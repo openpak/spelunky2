@@ -183,3 +183,16 @@ what triggers them is still open.
 - Daily Challenge: `legacy-lbs` gets the ticket request at the start and the result when
   the run ends. The leaderboard screen still shows Mossmouth's board
   (`cdn.spelunky2.net` is not redirected).
+
+## From the previous README
+
+The service the Switch build (`01007EC013ABC000`, current update v1.28.0)
+reaches when a console is redirected to OpenPak. One process serves the whole
+API on one port, dispatching on path:
+
+| Host | What it answers |
+| --- | --- |
+| `x.spelunky2.net` | `/get` — lobby fetch (join by code), `/put` — lobby publish (host), `/nso` — Nintendo token check, `/64b` — unknown |
+
+`cdn.spelunky2.net` is deliberately **not** redirected: it serves the game's own static
+content and it works against Mossmouth.
