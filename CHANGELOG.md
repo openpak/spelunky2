@@ -1,5 +1,9 @@
 # Changelog — spelunky2
 
+## v0.8.0 — 2026-11-02
+
+- Release from main; replaces the hand-built production image.
+
 ## v0.7.3 — 2026-10-24
 
 **Two consoles play together.** Measured in Harbor with two accounts: host, join by code,
