@@ -1,6 +1,6 @@
 # Notes: spelunky2
 
-## Status: /nso implemented, edge echo-reply live, lobby stubs pending
+## Endpoints
 
 `/nso` verifies the raw BAAS id_token against nx-baas and answers the binary
 protocol: the success packet on acceptance, Mossmouth's own 18-byte reject

@@ -31,7 +31,6 @@ go run ./cmd/spelunky2d
 ## Docs
 
 - [Protocol](docs/protocol.md)
-- [Evidence](docs/evidence.md)
 - [Deploy](docs/deploy.md)
 - [Notes](docs/notes.md)
 - [Ports](docs/ports.md)
