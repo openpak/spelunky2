@@ -32,7 +32,6 @@ go run ./cmd/spelunky2d
 
 - [Protocol](docs/protocol.md)
 - [Deploy](docs/deploy.md)
-- [Notes](docs/notes.md)
 - [Ports](docs/ports.md)
 
 Live compatibility status: [openpak.org/titles#t-141](https://openpak.org/titles#t-141).

@@ -196,3 +196,21 @@ API on one port, dispatching on path:
 
 `cdn.spelunky2.net` is deliberately **not** redirected: it serves the game's own static
 content and it works against Mossmouth.
+
+## Service behaviour
+
+- `/nso` verifies the raw BAAS id_token against nx-baas and answers the binary protocol: the
+  success packet on acceptance, Mossmouth's own 18-byte reject packet otherwise. It checks
+  nx-baas's `/internal/switch/identity` rather than phoning Nintendo because that also answers
+  nickname, banned state and "online now", which a signature cannot
+  (`cmd/spelunky2d/identity.go`).
+- Every accepted login leases one participant generation from the shared connectivity service
+  (title `spelunky2`, component `rendezvous`) so players behind one public IP stay distinct when
+  the relay phase pairs them. Unconfigured or failing, the login still succeeds and the session
+  goes unleashed.
+- Post-login the client sprays 2-byte `{edge_index, 0x14}` UDP probes at 2816/udp; each is
+  answered with the 20-byte echo reply (`-edge-echo=false` silences it).
+- `/put`, `/get` and `/64b` log the redacted request and answer 404 until the first accepted
+  lobby call decides what they must say.
+- The lobby is the host's: like `klei`'s listings, the service stores the object the host wrote
+  and hands it back unchanged, so two builds agree with each other rather than with us.
