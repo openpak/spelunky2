@@ -1,5 +1,17 @@
 # Changelog — spelunky2
 
+## v0.9.0 — 2026-11-03
+
+- `legacy-lbs` run results are stored in Postgres (`SPELUNKY2_DATABASE_URL`, pool of 3, table
+  `spelunky2_runs` created at start) with the BAAS user id of the session that sent them. Only a
+  ticket this process issued to that session is accepted; the 20 repeated copies collapse to one row.
+  Without the variable nothing changes: results are logged and kept in memory.
+- Rankings contract on `RANKINGS_ADDR` (network `switch`): boards `daily` (today, UTC) and `best`
+  (all time), one row per player. The boards stay empty until `SPELUNKY2_SCORE_FIELD` (0, 1 or 2)
+  names which of the result's three numbers is the score: that has not been measured yet.
+- Rewards events (`spelunky2_ranked_runs` keyed by the run, `spelunky2_daily_runs` keyed by the
+  UTC day) for each stored first-seen result, identity `switch` / BAAS user id.
+
 ## v0.8.0 — 2026-11-02
 
 - Release from main; replaces the hand-built production image.

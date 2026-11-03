@@ -33,6 +33,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/openpak/rewards-emit"
 )
 
 var (
@@ -68,7 +70,12 @@ func main() {
 		go serveLobby(*lobbyAddr, s.world)
 	}
 	if *lbsAddr != "" {
-		go serveLBS(*lbsAddr, newLBS(s.sessions))
+		l := newLBS(s.sessions)
+		l.store = startStore()
+		if l.store != nil {
+			l.rw = emit.FromEnv("spelunky2")
+		}
+		go serveLBS(*lbsAddr, l)
 	}
 	log.Fatal(http.ListenAndServe(*addr, mux))
 }
