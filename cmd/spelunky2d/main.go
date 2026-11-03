@@ -32,6 +32,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"openpak/spelunky2/internal/httplog"
 	"strings"
 )
 
@@ -70,7 +71,7 @@ func main() {
 	if *lbsAddr != "" {
 		startLBS(*lbsAddr, s.sessions)
 	}
-	log.Fatal(http.ListenAndServe(*addr, mux))
+	log.Fatal(http.ListenAndServe(*addr, httplog.Middleware(mux)))
 }
 
 type server struct {
