@@ -1,5 +1,15 @@
 # Changelog — spelunky2
 
+## v0.9.1 — 2026-11-03
+
+- Everything is durable: issued run tickets (`spelunky2_tickets`) and the session key to BAAS user id
+  map (`spelunky2_sessions`) now live in Postgres next to the results. A result is accepted for a
+  ticket issued to that player, also after a restart; the duplicate copies, a restart and a forged
+  ticket produce no second row and no second rewards event.
+- No memory fallback: without `SPELUNKY2_DATABASE_URL` (or while the database is down, retried
+  every 15 s) `legacy-lbs` and the rankings listener stay off; the lobby and edge are unaffected.
+- Restart test: write, reopen, same boards, no duplicate events.
+
 ## v0.9.0 — 2026-11-03
 
 - `legacy-lbs` run results are stored in Postgres (`SPELUNKY2_DATABASE_URL`, pool of 3, table

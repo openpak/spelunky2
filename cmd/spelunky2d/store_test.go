@@ -17,14 +17,47 @@ import (
 	"openpak/spelunky2/internal/rankingsapi"
 )
 
+// memStore stands in for Postgres: tests "reopen" it by building a new lbs over the same value.
 type memStore struct {
-	mu   sync.Mutex
-	runs map[uint64]storedRun
+	mu       sync.Mutex
+	runs     map[uint64]storedRun
+	tickets  map[uint64]string
+	sessions map[[8]byte]string
+}
+
+func (m *memStore) SaveSession(_ context.Context, k [8]byte, p string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.sessions == nil {
+		m.sessions = map[[8]byte]string{}
+	}
+	m.sessions[k] = p
+	return nil
+}
+
+func (m *memStore) SessionPlayer(_ context.Context, k [8]byte) (string, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p, ok := m.sessions[k]
+	return p, ok, nil
+}
+
+func (m *memStore) IssueTicket(_ context.Context, t uint64, p string, _ time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.tickets == nil {
+		m.tickets = map[uint64]string{}
+	}
+	m.tickets[t] = p
+	return nil
 }
 
 func (m *memStore) Insert(_ context.Context, r storedRun) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.tickets[r.Ticket] != r.Player {
+		return false, nil
+	}
 	if _, ok := m.runs[r.Ticket]; ok {
 		return false, nil
 	}
@@ -69,9 +102,10 @@ func lbsWith(t *testing.T) (*lbs, *memStore, *[]map[string]any, func()) {
 	rw := emit.New(emit.Config{URL: srv.URL, Key: "k", Source: "spelunky2", Flush: 10 * time.Millisecond})
 	s := newSessions()
 	s.forToken("tok", &player{BaasUserID: "KU_a"})
-	l := newLBS(s)
 	ms := &memStore{}
-	l.store, l.rw = ms, rw
+	s.attach(ms)
+	l := newLBS(s, ms)
+	l.rw = rw
 	l.now = func() time.Time { return time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC) }
 	return l, ms, &got, func() { rw.Close(context.Background()); srv.Close() }
 }
@@ -124,17 +158,47 @@ func TestForgedTicketNotStored(t *testing.T) {
 	}
 }
 
-func TestNoStoreStillAnswers(t *testing.T) {
-	l := newLBS(newSessions())
-	l.sess.forToken("tok", &player{BaasUserID: "KU_a"})
-	if len(l.handle(sessKey(l))) != 8 {
-		t.Fatal("no ticket")
+func TestRestartKeepsEverythingAndCountsOnce(t *testing.T) {
+	l, ms, got, done := lbsWith(t)
+	key := sessKey(l)
+	tk := binary.LittleEndian.Uint64(l.handle(key)) // ticket issued before the "restart"
+	// restart: a new process has empty sessions and a new lbs over the same database
+	s2 := newSessions()
+	s2.attach(ms)
+	l2 := newLBS(s2, ms)
+	l2.rw = l.rw
+	l2.now = l.now
+	l2.handle(resultPkt(key, tk, 7000)) // result arrives after the restart
+	for i := 0; i < 5; i++ {
+		l2.handle(resultPkt(key, tk, 7000))
 	}
-	l.handle(resultPkt(sessKey(l), 1, 1)) // must not panic
+	// and a second restart replays the same copies
+	s3 := newSessions()
+	s3.attach(ms)
+	l3 := newLBS(s3, ms)
+	l3.rw = l.rw
+	l3.now = l.now
+	l3.handle(resultPkt(key, tk, 7000))
+	now := l.now()
+	sts, _ := ms.Standings(context.Background(), now.Format("2006-01-02"), 0)
+	if len(sts) != 1 || sts[0].Player != "KU_a" || sts[0].Score != 7000 {
+		t.Fatalf("board after restart: %+v", sts)
+	}
+	done()
+	if len(*got) != 2 {
+		t.Fatalf("events after restarts: %v", *got)
+	}
+}
+
+func TestNoSessionNoTicket(t *testing.T) {
+	l := newLBS(newSessions(), &memStore{})
+	if l.handle(make([]byte, 16)) != nil {
+		t.Fatal("ticket for an unknown session")
+	}
 }
 
 func TestBoards(t *testing.T) {
-	ms := &memStore{}
+	ms := &memStore{tickets: map[uint64]string{1: "A", 2: "B", 3: "A"}}
 	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
 	ms.Insert(context.Background(), storedRun{Ticket: 1, Player: "A", Values: [3]uint64{10}, Created: now})
 	ms.Insert(context.Background(), storedRun{Ticket: 2, Player: "B", Values: [3]uint64{30}, Created: now})

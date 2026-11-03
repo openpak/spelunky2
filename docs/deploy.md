@@ -20,7 +20,7 @@ the next handler lands is a finding.
 
 | Variable | Meaning |
 | --- | --- |
-| `SPELUNKY2_DATABASE_URL` | Postgres for `legacy-lbs` run results (table `spelunky2_runs`, created at start, pool of 3). Unset: results stay in memory, as before. |
+| `SPELUNKY2_DATABASE_URL` | Postgres for `legacy-lbs` run results (table `spelunky2_runs`, created at start, pool of 3). Required for `legacy-lbs` and the rankings: unset means both are off. Tickets, session keys and results live only here. |
 | `RANKINGS_ADDR` | Rankings contract listener (`:9090` on `openpak.network`, never published). Needs the database. |
 | `SPELUNKY2_SCORE_FIELD` | 0, 1 or 2: which of the result's three u64 is the score. Unset: the boards list is empty (no Rankings tab). |
 | `REWARDS_EVENTS_URL`, `REWARDS_EVENTS_KEY` | Rewards events; unset disables them. |

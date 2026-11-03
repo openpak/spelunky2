@@ -9,6 +9,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -16,7 +17,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/openpak/rewards-emit"
 
 	"openpak/spelunky2/internal/rankingsapi"
 )
@@ -38,7 +41,14 @@ type standing struct {
 }
 
 type runStore interface {
-	// Insert stores the run; false when its ticket was already stored (the 20 copies).
+	// SaveSession remembers which player a session key (first 8 session bytes) belongs to.
+	SaveSession(ctx context.Context, key [8]byte, player string) error
+	// SessionPlayer is the player a session key was saved for.
+	SessionPlayer(ctx context.Context, key [8]byte) (string, bool, error)
+	// IssueTicket records a ticket handed to a player.
+	IssueTicket(ctx context.Context, ticket uint64, player string, at time.Time) error
+	// Insert stores the run; false when its ticket was not issued to r.Player or the run is
+	// already stored (the 20 copies).
 	Insert(ctx context.Context, r storedRun) (bool, error)
 	// Standings is every player's best value of the given field, best first. day is a
 	// UTC "2006-01-02" filter, empty for all time.
@@ -60,6 +70,16 @@ func openStore(ctx context.Context, url string) (*pgStore, error) {
 		return nil, err
 	}
 	_, err = pool.Exec(ctx, `
+CREATE TABLE IF NOT EXISTS spelunky2_sessions (
+  key          bytea PRIMARY KEY,
+  baas_user_id text NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS spelunky2_tickets (
+  ticket       bigint PRIMARY KEY,
+  baas_user_id text NOT NULL,
+  issued_at    timestamptz NOT NULL
+);
 CREATE TABLE IF NOT EXISTS spelunky2_runs (
   ticket     bigint PRIMARY KEY,
   baas_user_id text NOT NULL,
@@ -76,9 +96,31 @@ CREATE INDEX IF NOT EXISTS spelunky2_runs_day ON spelunky2_runs (day);`)
 	return &pgStore{pool}, nil
 }
 
+func (s *pgStore) SaveSession(ctx context.Context, key [8]byte, player string) error {
+	_, err := s.pool.Exec(ctx, `INSERT INTO spelunky2_sessions (key, baas_user_id) VALUES ($1,$2)
+ON CONFLICT (key) DO UPDATE SET baas_user_id = EXCLUDED.baas_user_id`, key[:], player)
+	return err
+}
+
+func (s *pgStore) SessionPlayer(ctx context.Context, key [8]byte) (string, bool, error) {
+	var p string
+	err := s.pool.QueryRow(ctx, `SELECT baas_user_id FROM spelunky2_sessions WHERE key=$1`, key[:]).Scan(&p)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	return p, err == nil, err
+}
+
+func (s *pgStore) IssueTicket(ctx context.Context, ticket uint64, player string, at time.Time) error {
+	_, err := s.pool.Exec(ctx, `INSERT INTO spelunky2_tickets (ticket, baas_user_id, issued_at) VALUES ($1,$2,$3)`,
+		int64(ticket), player, at)
+	return err
+}
+
 func (s *pgStore) Insert(ctx context.Context, r storedRun) (bool, error) {
 	t, err := s.pool.Exec(ctx, `INSERT INTO spelunky2_runs (ticket, baas_user_id, name, v0, v1, v2, day, created_at)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (ticket) DO NOTHING`,
+SELECT ticket, baas_user_id, $3, $4, $5, $6, $7, $8 FROM spelunky2_tickets WHERE ticket=$1 AND baas_user_id=$2
+ON CONFLICT (ticket) DO NOTHING`,
 		int64(r.Ticket), r.Player, r.Name, int64(r.Values[0]), int64(r.Values[1]), int64(r.Values[2]),
 		r.Created.UTC().Format("2006-01-02"), r.Created)
 	return err == nil && t.RowsAffected() == 1, err
@@ -158,21 +200,41 @@ func (r rankSource) Rows(ctx context.Context, board string, q rankingsapi.Query)
 	return rankingsapi.Window(rankingsapi.KindScore, all, q), nil
 }
 
-// startStore opens the database and the contract server from the environment; both are off
-// when unset. It returns nil when no database is configured.
-func startStore() runStore {
+// openStoreFromEnv returns the database store, or nil with the reason logged when
+// SPELUNKY2_DATABASE_URL is unset or the database cannot be reached.
+func openStoreFromEnv() *pgStore {
 	url := os.Getenv("SPELUNKY2_DATABASE_URL")
 	if url == "" {
+		log.Printf("[spelunky2] SPELUNKY2_DATABASE_URL unset: legacy-lbs (run tickets and results) is off")
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	st, err := openStore(ctx, url)
 	if err != nil {
-		log.Printf("[spelunky2] database unavailable, results kept in memory only: %v", err)
+		log.Printf("[spelunky2] database unavailable: %v", err)
 		return nil
 	}
-	log.Printf("[spelunky2] results stored in postgres")
-	rankingsapi.Serve(os.Getenv("RANKINGS_ADDR"), "switch", rankSource{st, scoreField(), time.Now})
 	return st
+}
+
+// startLBS brings up the contract server and legacy-lbs once the database is reachable,
+// retrying every 15 s. Nothing is ever answered from memory.
+func startLBS(addr string, sess *sessions) {
+	if os.Getenv("SPELUNKY2_DATABASE_URL") == "" {
+		openStoreFromEnv()
+		return
+	}
+	go func() {
+		var st *pgStore
+		for st = openStoreFromEnv(); st == nil; st = openStoreFromEnv() {
+			time.Sleep(15 * time.Second)
+		}
+		log.Printf("[spelunky2] results stored in postgres")
+		rankingsapi.Serve(os.Getenv("RANKINGS_ADDR"), "switch", rankSource{st, scoreField(), time.Now})
+		sess.attach(st)
+		l := newLBS(sess, st)
+		l.rw = emit.FromEnv("spelunky2")
+		serveLBS(addr, l)
+	}()
 }

@@ -33,8 +33,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-
-	"github.com/openpak/rewards-emit"
 )
 
 var (
@@ -70,12 +68,7 @@ func main() {
 		go serveLobby(*lobbyAddr, s.world)
 	}
 	if *lbsAddr != "" {
-		l := newLBS(s.sessions)
-		l.store = startStore()
-		if l.store != nil {
-			l.rw = emit.FromEnv("spelunky2")
-		}
-		go serveLBS(*lbsAddr, l)
+		startLBS(*lbsAddr, s.sessions)
 	}
 	log.Fatal(http.ListenAndServe(*addr, mux))
 }
@@ -140,6 +133,7 @@ func (s *server) nso(w http.ResponseWriter, r *http.Request) {
 		writeOctets(w, rejectPacket)
 		return
 	}
+	s.sessions.save(sess, p)
 	sessHex := hex.EncodeToString(sess[:])
 	lease := s.conn.register(sessHex, p.BaasUserID)
 	s.sessions.setLease(sess, lease)

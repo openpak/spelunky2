@@ -180,8 +180,8 @@ what triggers them is still open.
 - On the edge the hub's per-slot fan-out (others' streams only, no echo of one's own)
   is enough: both consoles ran the same level in step, each seeing the other's moves,
   for several minutes. A player leaving mid-level leaves the other playing on.
-- Status 2026-11-03 (v0.9.0): results are stored (BAAS user id from the session key, ticket
-  must have been issued to that session), served as contract boards `daily` and `best`, and
+- Status 2026-11-03 (v0.9.1): tickets, session keys and results are stored in Postgres (BAAS user id from the session key, ticket
+  must have been issued to that player), served as contract boards `daily` and `best`, and
   counted for rewards. Open: which of the three u64 is the score, and whether the packet tells
   a daily from a ranked run (it does not; both rewards metrics are emitted for every result).
 - Daily Challenge: `legacy-lbs` gets the ticket request at the start and the result when

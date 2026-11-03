@@ -13,10 +13,13 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"log"
 	"sync"
+	"time"
 )
 
 var (
@@ -34,6 +37,61 @@ type sessions struct {
 	bySessID map[string]*player
 	leases   map[string]string   // session hex -> connectivity lease ID ("" when unleashed)
 	byKey    map[[8]byte]*player // first 8 session bytes: the key the client presents later
+	store    runStore            // durable copy of byKey, set once the database is up
+}
+
+// attach makes the key -> player map durable: it saves every session minted so far and every
+// later one (sessions.save), and lbs falls back to it after a restart.
+func (st *sessions) attach(rs runStore) {
+	st.mu.Lock()
+	st.store = rs
+	pending := map[[8]byte]string{}
+	for k, p := range st.byKey {
+		pending[k] = p.BaasUserID
+	}
+	st.mu.Unlock()
+	for k, id := range pending {
+		_ = rs.SaveSession(context.Background(), k, id)
+	}
+}
+
+// save writes a freshly minted session's key to the database (no-op until attach).
+func (st *sessions) save(sess [16]byte, p *player) {
+	st.mu.Lock()
+	rs := st.store
+	st.mu.Unlock()
+	if rs == nil {
+		return
+	}
+	var k [8]byte
+	copy(k[:], sess[:8])
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := rs.SaveSession(ctx, k, p.BaasUserID); err != nil {
+		log.Printf("[spelunky2] session not saved: %v", err)
+	}
+}
+
+// playerForKey is byKeyIn, then the database for a session minted before a restart.
+func (st *sessions) playerForKey(b []byte) (*player, bool) {
+	if p, _, ok := st.byKeyIn(b); ok {
+		return p, true
+	}
+	st.mu.Lock()
+	rs := st.store
+	st.mu.Unlock()
+	if rs == nil || len(b) < 8 {
+		return nil, false
+	}
+	var k [8]byte
+	copy(k[:], b[:8])
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	id, ok, err := rs.SessionPlayer(ctx, k)
+	if err != nil || !ok {
+		return nil, false
+	}
+	return &player{BaasUserID: id}, true
 }
 
 func newSessions() *sessions {
