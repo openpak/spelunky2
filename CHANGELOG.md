@@ -1,5 +1,9 @@
 # Changelog — spelunky2
 
+## v0.9.2 — 2026-11-03
+
+**Rewards events survive a restart.** Bumps rewards-emit to v0.3.0: with `REWARDS_EMIT_DATABASE_URL` set the undelivered reward-event queue lives in Postgres (schema `emit`) instead of memory. Unset, behaviour is unchanged.
+
 ## v0.9.1 — 2026-11-03
 
 - Everything is durable: issued run tickets (`spelunky2_tickets`) and the session key to BAAS user id
