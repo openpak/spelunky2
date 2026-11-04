@@ -16,6 +16,15 @@ disables) are the knobs. `x.spelunky2.net` reaches it through nx-baas's
 cutover is documented in `docs/protocol.md` §6. Every line it prints before
 the next handler lands is a finding.
 
+## Account erasure
+
+`DELETE /internal/accounts/{account_id}/data` on the health listener (`http://openpak-spelunky2:22661`),
+`Authorization: Bearer $ACCOUNT_ERASE_KEY` (unset: 503). Also needs `ACCOUNT_GRPC_ADDR` (default
+`openpak-account:20001`) and `ACCOUNT_INTERNAL_KEY` to list the account's `switch` link subjects.
+Erased: that BAAS user id's `spelunky2_runs`, `spelunky2_tickets`, `spelunky2_sessions` rows and in-memory sessions.
+Kept: nothing authored; runs are the player's own so they go too. Not tied to an account (in memory only, token hash
+key, gone at restart): the progress blocks of `/get` `/put` and the 2-minute lobby members.
+
 ## Results, rankings and rewards (environment)
 
 | Variable | Meaning |

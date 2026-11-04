@@ -1,5 +1,14 @@
 # Changelog — spelunky2
 
+## v0.11.0 - 2026-11-04
+
+**Account erasure (openpak/prds#120).** `DELETE /internal/accounts/{account_id}/data` on the health listener
+(`:22661`), `Authorization: Bearer $ACCOUNT_ERASE_KEY` (unset: 503). It asks the account core
+(`ACCOUNT_GRPC_ADDR`, `ACCOUNT_INTERNAL_KEY`) for the account's `switch` links and, in one transaction, deletes
+that BAAS user id's rows in `spelunky2_runs`, `spelunky2_tickets` and `spelunky2_sessions`, and drops its in-memory
+sessions. Runs are deleted outright (a leaderboard row is the player's own); nothing authored is kept. Idempotent.
+Logs `account erased account=<uuid> rows=<n> service=spelunky2`.
+
 ## v0.10.0 — 2026-11-03
 - Per-request logging: one slog line per HTTP request (method, path, status, ms) on stderr via internal/httplog. Query strings, headers and bodies are never logged; /healthz and /metrics are skipped.
 

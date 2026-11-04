@@ -53,6 +53,7 @@ func main() {
 	mux.HandleFunc("/", s.route)
 	go func() {
 		h := http.NewServeMux()
+		s.setupErase(h)
 		h.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, 200, map[string]any{"status": "ok"})
 		})
@@ -80,6 +81,7 @@ type server struct {
 	conn     *connectivityClient
 	world    *world
 	progress *progressStore
+	links    linkLister
 }
 
 func newServer(ids identityClient) *server {
