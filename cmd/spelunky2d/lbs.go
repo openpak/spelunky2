@@ -32,7 +32,6 @@ type runResult struct {
 	Player string
 	Ticket uint64
 	Values [3]uint64
-	Name   string
 }
 
 type lbs struct {
@@ -75,14 +74,7 @@ func (b *lbs) handle(pkt []byte) []byte {
 		for i := range r.Values {
 			r.Values[i] = binary.LittleEndian.Uint64(pkt[24+8*i:])
 		}
-		name := pkt[48:80]
-		for i, c := range name {
-			if c == 0 {
-				name = name[:i]
-				break
-			}
-		}
-		r.Name = string(name)
+		// pkt[48:80] is the player's typed name: not kept, the account core owns names.
 		b.persist(r)
 	default:
 		log.Printf("[spelunky2] lbs: %d-byte packet from %s", len(pkt), who(p.BaasUserID))
@@ -97,7 +89,7 @@ func (b *lbs) persist(r runResult) {
 	at := b.now()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	inserted, err := b.store.Insert(ctx, storedRun{Ticket: r.Ticket, Player: r.Player, Name: r.Name, Values: r.Values, Created: at})
+	inserted, err := b.store.Insert(ctx, storedRun{Ticket: r.Ticket, Player: r.Player, Values: r.Values, Created: at})
 	if err != nil {
 		log.Printf("[spelunky2] lbs: store result: %v", err)
 		return

@@ -62,7 +62,7 @@ func eraseFixture(t *testing.T) (*server, *memStore) {
 	for i, p := range []string{"KU_a", "KU_b"} {
 		tk := uint64(i + 1)
 		_ = ms.IssueTicket(ctx, tk, p, now)
-		_, _ = ms.Insert(ctx, storedRun{Ticket: tk, Player: p, Name: "x", Created: now})
+		_, _ = ms.Insert(ctx, storedRun{Ticket: tk, Player: p, Created: now})
 	}
 	return s, ms
 }

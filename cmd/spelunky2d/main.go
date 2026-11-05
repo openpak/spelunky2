@@ -82,6 +82,7 @@ type server struct {
 	world    *world
 	progress *progressStore
 	links    linkLister
+	linked   *linkGate // nil: no account core, nobody is refused
 }
 
 func newServer(ids identityClient) *server {
@@ -127,6 +128,11 @@ func (s *server) nso(w http.ResponseWriter, r *http.Request) {
 	p, err := s.ids.byIDToken(tok)
 	if err != nil || tok == "" {
 		log.Printf("[spelunky2] nso rejected (%v)", shortErr(err))
+		writeOctets(w, rejectPacket)
+		return
+	}
+	if s.linked != nil && !s.linked.ok(p.BaasUserID) {
+		log.Printf("[spelunky2] nso rejected: no OpenPak account linked to %s", who(p.BaasUserID))
 		writeOctets(w, rejectPacket)
 		return
 	}

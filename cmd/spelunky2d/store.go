@@ -28,7 +28,6 @@ import (
 type storedRun struct {
 	Ticket  uint64
 	Player  string // BAAS user id of the session that sent it
-	Name    string
 	Values  [3]uint64
 	Created time.Time
 }
@@ -83,12 +82,13 @@ CREATE TABLE IF NOT EXISTS spelunky2_tickets (
 CREATE TABLE IF NOT EXISTS spelunky2_runs (
   ticket     bigint PRIMARY KEY,
   baas_user_id text NOT NULL,
-  name       text NOT NULL,
   v0 bigint NOT NULL, v1 bigint NOT NULL, v2 bigint NOT NULL,
   day        date NOT NULL,
   created_at timestamptz NOT NULL
 );
-CREATE INDEX IF NOT EXISTS spelunky2_runs_day ON spelunky2_runs (day);`)
+CREATE INDEX IF NOT EXISTS spelunky2_runs_day ON spelunky2_runs (day);
+-- 2026-11-05 (prds#131): the name the client sent was never read; the account core owns names.
+ALTER TABLE spelunky2_runs DROP COLUMN IF EXISTS name;`)
 	if err != nil {
 		pool.Close()
 		return nil, err
@@ -118,10 +118,10 @@ func (s *pgStore) IssueTicket(ctx context.Context, ticket uint64, player string,
 }
 
 func (s *pgStore) Insert(ctx context.Context, r storedRun) (bool, error) {
-	t, err := s.pool.Exec(ctx, `INSERT INTO spelunky2_runs (ticket, baas_user_id, name, v0, v1, v2, day, created_at)
-SELECT ticket, baas_user_id, $3, $4, $5, $6, $7, $8 FROM spelunky2_tickets WHERE ticket=$1 AND baas_user_id=$2
+	t, err := s.pool.Exec(ctx, `INSERT INTO spelunky2_runs (ticket, baas_user_id, v0, v1, v2, day, created_at)
+SELECT ticket, baas_user_id, $3, $4, $5, $6, $7 FROM spelunky2_tickets WHERE ticket=$1 AND baas_user_id=$2
 ON CONFLICT (ticket) DO NOTHING`,
-		int64(r.Ticket), r.Player, r.Name, int64(r.Values[0]), int64(r.Values[1]), int64(r.Values[2]),
+		int64(r.Ticket), r.Player, int64(r.Values[0]), int64(r.Values[1]), int64(r.Values[2]),
 		r.Created.UTC().Format("2006-01-02"), r.Created)
 	return err == nil && t.RowsAffected() == 1, err
 }

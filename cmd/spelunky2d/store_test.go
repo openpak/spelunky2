@@ -133,7 +133,7 @@ func TestResultStoredAndCountedOnce(t *testing.T) {
 	for i := 0; i < 20; i++ { // the client sends 20 copies
 		l.handle(resultPkt(key, tk, 5000))
 	}
-	if len(ms.runs) != 1 || ms.runs[tk].Player != "KU_a" || ms.runs[tk].Values[0] != 5000 || ms.runs[tk].Name != "Ana" {
+	if len(ms.runs) != 1 || ms.runs[tk].Player != "KU_a" || ms.runs[tk].Values[0] != 5000 {
 		t.Fatalf("runs: %+v", ms.runs)
 	}
 	done()

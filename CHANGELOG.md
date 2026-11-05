@@ -1,5 +1,10 @@
 # Changelog — spelunky2
 
+## v0.12.0 - 2026-11-05
+
+- Link at first use (prds#131): `/nso` answers the reject packet for a BAAS user no active OpenPak account owns (checked against the account core, positive answers cached five minutes; a core outage lets the player in).
+- The player name in a run result is no longer stored: `spelunky2_runs.name` was never read and is dropped at startup (idempotent). Names belong to the account core. Scores stay where they were served from: the rankings contract (`daily`, `best`) the leaderboards core pulls, keyed by BAAS user id.
+
 ## v0.11.0 - 2026-11-04
 
 **Account erasure (openpak/prds#120).** `DELETE /internal/accounts/{account_id}/data` on the health listener

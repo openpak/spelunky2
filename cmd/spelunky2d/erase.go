@@ -19,8 +19,10 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	accountv1 "github.com/openpak/account-api/openpak/account/v1"
 )
@@ -63,6 +65,18 @@ func (c *coreLinks) SwitchSubjects(ctx context.Context, accountID string) ([]str
 		}
 	}
 	return out, nil
+}
+
+// Linked reports whether an active OpenPak account owns the BAAS user id (link at first use, prds#131).
+func (c *coreLinks) Linked(ctx context.Context, baas string) (bool, error) {
+	l, err := c.links.GetLinkBySubject(ctx, &accountv1.GetLinkBySubjectRequest{Namespace: "switch", SubjectId: strings.ToLower(baas)})
+	if status.Code(err) == codes.NotFound {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return l.GetState() == accountv1.LinkState_LINK_STATE_ACTIVE && l.GetAccountId() != "", nil
 }
 
 // eraseStore is the durable side: spelunky2_sessions, _tickets and _runs, all keyed by BAAS user id.
@@ -190,6 +204,7 @@ func (s *server) setupErase(mux *http.ServeMux) {
 			log.Printf("[spelunky2] ERROR erase endpoint cannot reach the account core: %v", err)
 		} else {
 			s.links = l
+			s.linked = newLinkGate(l, 5*time.Minute)
 		}
 	}
 	mux.HandleFunc("DELETE /internal/accounts/{account_id}/data", s.eraseHandler(key))
